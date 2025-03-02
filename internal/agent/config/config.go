@@ -14,9 +14,13 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	conf, err := env.ParseAs[Config]()
-	if err != nil {
+	conf := &Config{
+		CalculatorAddr:           ":50051",
+		GrpcClientConnectTimeout: 10 * time.Second,
+		ComputingPower:           10,
+	}
+	if err := env.Parse(&conf); err != nil {
 		return nil, fmt.Errorf("env parse: %w", err)
 	}
-	return &conf, nil
+	return conf, nil
 }
