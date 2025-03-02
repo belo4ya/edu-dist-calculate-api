@@ -1,0 +1,5 @@
+linters:
+  enable:
+    - goimports
+issues:
+  fix: true

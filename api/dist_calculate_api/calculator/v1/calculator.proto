@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package dist_calculate_api.calculator.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "edu-dist-calculate-api/pkg/dist_calculate_api/calculator/v1;calculatorv1";
+
+// Calculator service
+service CalculatorService {
+  // Add arithmetic expression for calculation
+  rpc Calculate(CalculateRequest) returns (CalculateResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/calculate"
+      body: "*"
+    };
+  }
+
+  // Get list of expressions
+  rpc ListExpressions(google.protobuf.Empty) returns (ListExpressionsResponse) {
+    option (google.api.http) = {get: "/api/v1/expressions"};
+  }
+
+  // Get expression by its identifier
+  rpc GetExpression(GetExpressionRequest) returns (GetExpressionResponse) {
+    option (google.api.http) = {get: "/api/v1/expressions/{id}"};
+  }
+
+  // Get task for execution (for agents)
+  rpc GetTask(google.protobuf.Empty) returns (GetTaskResponse) {
+    option (google.api.http) = {get: "/internal/task"};
+  }
+
+  // Submit task processing result (from agents)
+  rpc SubmitTaskResult(SubmitTaskResultRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/internal/task"
+      body: "*"
+    };
+  }
+}
+
+// Expression calculation status
+enum ExpressionStatus {
+  EXPRESSION_STATUS_UNSPECIFIED = 0;
+  EXPRESSION_STATUS_PENDING = 1;
+  EXPRESSION_STATUS_IN_PROGRESS = 2;
+  EXPRESSION_STATUS_COMPLETED = 3;
+  EXPRESSION_STATUS_FAILED = 4;
+}
+
+// Operations for calculation
+enum Operation {
+  OPERATION_UNSPECIFIED = 0;
+  OPERATION_ADDITION = 1;
+  OPERATION_SUBTRACTION = 2;
+  OPERATION_MULTIPLICATION = 3;
+  OPERATION_DIVISION = 4;
+}
+
+// Request for expression calculation
+message CalculateRequest {
+  string expression = 1;
+}
+
+// Response with expression identifier
+message CalculateResponse {
+  string id = 1;
+}
+
+// Expression information
+message Expression {
+  string id = 1;
+  ExpressionStatus status = 2;
+  optional double result = 3;
+}
+
+// List of expressions
+message ListExpressionsResponse {
+  repeated Expression expressions = 1;
+}
+
+// Request for expression by identifier
+message GetExpressionRequest {
+  string id = 1;
+}
+
+// Response with expression information
+message GetExpressionResponse {
+  Expression expression = 1;
+}
+
+// Task for agent
+message Task {
+  string id = 1;
+  string arg1 = 2;
+  string arg2 = 3;
+  Operation operation = 4;
+  google.protobuf.Duration operation_time = 5;
+}
+
+// Response with task for agent
+message GetTaskResponse {
+  Task task = 1;
+}
+
+// Request to submit task result
+message SubmitTaskResultRequest {
+  string id = 1;
+  double result = 2;
+}
