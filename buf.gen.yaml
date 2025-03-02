@@ -11,3 +11,11 @@ plugins:
   - plugin: grpc-gateway
     out: pkg
     opt: paths=source_relative
+  - plugin: openapiv2
+    out: api/dist_calculate_api
+    strategy: all
+    opt:
+      - merge_file_name=dist_calculate_api_v1
+      - allow_merge=true
+      - omit_enum_default_value=true
+      - json_names_for_fields=false

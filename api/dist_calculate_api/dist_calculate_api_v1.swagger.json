@@ -1,0 +1,311 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "dist_calculate_api/calculator/v1/calculator.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "CalculatorService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/v1/calculate": {
+      "post": {
+        "summary": "Add arithmetic expression for calculation",
+        "operationId": "CalculatorService_Calculate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CalculateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CalculateRequest"
+            }
+          }
+        ],
+        "tags": [
+          "CalculatorService"
+        ]
+      }
+    },
+    "/api/v1/expressions": {
+      "get": {
+        "summary": "Get list of expressions",
+        "operationId": "CalculatorService_ListExpressions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListExpressionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "CalculatorService"
+        ]
+      }
+    },
+    "/api/v1/expressions/{id}": {
+      "get": {
+        "summary": "Get expression by its identifier",
+        "operationId": "CalculatorService_GetExpression",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetExpressionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "CalculatorService"
+        ]
+      }
+    },
+    "/internal/task": {
+      "get": {
+        "summary": "Get task for execution (for agents)",
+        "operationId": "CalculatorService_GetTask",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetTaskResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "CalculatorService"
+        ]
+      },
+      "post": {
+        "summary": "Submit task processing result (from agents)",
+        "operationId": "CalculatorService_SubmitTaskResult",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SubmitTaskResultRequest"
+            }
+          }
+        ],
+        "tags": [
+          "CalculatorService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1CalculateRequest": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string"
+        }
+      },
+      "title": "Request for expression calculation"
+    },
+    "v1CalculateResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "title": "Response with expression identifier"
+    },
+    "v1Expression": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/v1ExpressionStatus"
+        },
+        "result": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "title": "Expression information"
+    },
+    "v1ExpressionStatus": {
+      "type": "string",
+      "enum": [
+        "EXPRESSION_STATUS_PENDING",
+        "EXPRESSION_STATUS_IN_PROGRESS",
+        "EXPRESSION_STATUS_COMPLETED",
+        "EXPRESSION_STATUS_FAILED"
+      ],
+      "title": "Expression calculation status"
+    },
+    "v1GetExpressionResponse": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "$ref": "#/definitions/v1Expression"
+        }
+      },
+      "title": "Response with expression information"
+    },
+    "v1GetTaskResponse": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/definitions/v1Task"
+        }
+      },
+      "title": "Response with task for agent"
+    },
+    "v1ListExpressionsResponse": {
+      "type": "object",
+      "properties": {
+        "expressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Expression"
+          }
+        }
+      },
+      "title": "List of expressions"
+    },
+    "v1Operation": {
+      "type": "string",
+      "enum": [
+        "OPERATION_ADDITION",
+        "OPERATION_SUBTRACTION",
+        "OPERATION_MULTIPLICATION",
+        "OPERATION_DIVISION"
+      ],
+      "title": "Operations for calculation"
+    },
+    "v1SubmitTaskResultRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "title": "Request to submit task result"
+    },
+    "v1Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "arg1": {
+          "type": "string"
+        },
+        "arg2": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/definitions/v1Operation"
+        },
+        "operation_time": {
+          "type": "string"
+        }
+      },
+      "title": "Task for agent"
+    }
+  }
+}
