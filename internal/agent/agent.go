@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"math"
-	"strconv"
 	"sync"
 	"time"
 
@@ -51,12 +50,12 @@ func (a *Agent) Start(ctx context.Context) error {
 
 func (a *Agent) worker(ctx context.Context, workerID int) {
 	log := a.log.With("worker_id", workerID)
-	log.InfoContext(ctx, "запуск воркера")
+	log.InfoContext(ctx, "worker started")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.InfoContext(ctx, "завершение работы воркера")
+			log.InfoContext(ctx, "worker shutdown")
 			return
 		default:
 			task, err := a.fetchTask(ctx, log)
@@ -65,7 +64,7 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 			}
 
 			log = log.With("task_id", task.Id)
-			log.DebugContext(ctx, "выполнение задачи")
+			log.DebugContext(ctx, "executing task")
 
 			result := a.executeTask(task)
 
@@ -73,19 +72,29 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 				continue
 			}
 
-			log.DebugContext(ctx, "задача выполнена успешно", "result", result)
+			log.DebugContext(ctx, "task completed", "result", result)
 		}
 	}
 }
 
 func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
-	arg1, err1 := strconv.ParseFloat(task.Arg1, 64)
-	arg2, err2 := strconv.ParseFloat(task.Arg2, 64)
-	if err1 != nil || err2 != nil {
+	time.Sleep(task.OperationTime.AsDuration())
+
+	switch task.Operation {
+	case calculatorv1.Operation_OPERATION_ADDITION:
+		return task.Arg1 + task.Arg2
+	case calculatorv1.Operation_OPERATION_SUBTRACTION:
+		return task.Arg1 - task.Arg2
+	case calculatorv1.Operation_OPERATION_MULTIPLICATION:
+		return task.Arg1 * task.Arg2
+	case calculatorv1.Operation_OPERATION_DIVISION:
+		if task.Arg2 == 0 {
+			return math.NaN()
+		}
+		return task.Arg1 / task.Arg2
+	default:
 		return math.NaN()
 	}
-	time.Sleep(task.OperationTime.AsDuration())
-	return ops[task.Operation](arg1, arg2)
 }
 
 func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.Task, error) {
@@ -98,12 +107,12 @@ func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.
 		default:
 			task, err := a.client.GetTask(ctx)
 			if err != nil {
-				log.ErrorContext(ctx, "ошибка при запросе задачи", "error", err, "attempt", attempt)
+				log.ErrorContext(ctx, "error fetching task", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 				continue
 			}
 			if task == nil {
-				log.DebugContext(ctx, "нет доступных задач")
+				log.DebugContext(ctx, "no available tasks")
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -127,7 +136,7 @@ func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID s
 			return ctx.Err()
 		default:
 			if err := a.client.SubmitTaskResult(ctx, req); err != nil {
-				log.ErrorContext(ctx, "ошибка при отправке результата задачи", "error", err, "attempt", attempt)
+				log.ErrorContext(ctx, "error submitting task result", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 				continue
 			}
@@ -141,19 +150,4 @@ func backoffExponentialWithJitter(dur time.Duration, cap time.Duration, jitter f
 	return func(attempt int) time.Duration {
 		return min(f(context.Background(), uint(attempt)), cap)
 	}
-}
-
-var ops = map[calculatorv1.Operation]func(float64, float64) float64{
-	calculatorv1.Operation_OPERATION_ADDITION: func(a, b float64) float64 {
-		return a + b
-	},
-	calculatorv1.Operation_OPERATION_SUBTRACTION: func(a, b float64) float64 {
-		return a - b
-	},
-	calculatorv1.Operation_OPERATION_MULTIPLICATION: func(a, b float64) float64 {
-		return a * b
-	},
-	calculatorv1.Operation_OPERATION_DIVISION: func(a, b float64) float64 {
-		return a / b
-	},
 }

@@ -95,8 +95,8 @@ message GetExpressionResponse {
 // Task for agent
 message Task {
   string id = 1;
-  string arg1 = 2;
-  string arg2 = 3;
+  double arg1 = 2;
+  double arg2 = 3;
   Operation operation = 4;
   google.protobuf.Duration operation_time = 5;
 }

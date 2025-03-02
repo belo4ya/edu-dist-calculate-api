@@ -293,10 +293,12 @@
           "type": "string"
         },
         "arg1": {
-          "type": "string"
+          "type": "number",
+          "format": "double"
         },
         "arg2": {
-          "type": "string"
+          "type": "number",
+          "format": "double"
         },
         "operation": {
           "$ref": "#/definitions/v1Operation"
