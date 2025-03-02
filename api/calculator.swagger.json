@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "dist_calculate_api/calculator/v1/calculator.proto",
+    "title": "calculator/v1/calculator.proto",
     "version": "version not set"
   },
   "tags": [

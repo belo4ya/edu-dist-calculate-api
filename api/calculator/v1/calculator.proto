@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package dist_calculate_api.calculator.v1;
+package calculator.v1;
 
 import "google/api/annotations.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "edu-dist-calculate-api/pkg/dist_calculate_api/calculator/v1;calculatorv1";
+option go_package = "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1;v1";
 
 // Calculator service
 service CalculatorService {

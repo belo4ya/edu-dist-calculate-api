@@ -2,13 +2,15 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
-	CalculatorAddr int `env:"CALCULATOR_ADDR"`
-	ComputingPower int `env:"COMPUTING_POWER"`
+	CalculatorAddr           string        `env:"CALCULATOR_ADDR"`
+	GrpcClientConnectTimeout time.Duration `env:"GRPC_CLIENT_CONNECT_TIMEOUT"`
+	ComputingPower           int           `env:"COMPUTING_POWER"`
 }
 
 func Load() (*Config, error) {

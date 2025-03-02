@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: dist_calculate_api/calculator/v1/calculator.proto
+// source: calculator/v1/calculator.proto
 
-package calculatorv1
+package v1
 
 import (
 	context "context"
@@ -20,11 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CalculatorService_Calculate_FullMethodName        = "/dist_calculate_api.calculator.v1.CalculatorService/Calculate"
-	CalculatorService_ListExpressions_FullMethodName  = "/dist_calculate_api.calculator.v1.CalculatorService/ListExpressions"
-	CalculatorService_GetExpression_FullMethodName    = "/dist_calculate_api.calculator.v1.CalculatorService/GetExpression"
-	CalculatorService_GetTask_FullMethodName          = "/dist_calculate_api.calculator.v1.CalculatorService/GetTask"
-	CalculatorService_SubmitTaskResult_FullMethodName = "/dist_calculate_api.calculator.v1.CalculatorService/SubmitTaskResult"
+	CalculatorService_Calculate_FullMethodName        = "/calculator.v1.CalculatorService/Calculate"
+	CalculatorService_ListExpressions_FullMethodName  = "/calculator.v1.CalculatorService/ListExpressions"
+	CalculatorService_GetExpression_FullMethodName    = "/calculator.v1.CalculatorService/GetExpression"
+	CalculatorService_GetTask_FullMethodName          = "/calculator.v1.CalculatorService/GetTask"
+	CalculatorService_SubmitTaskResult_FullMethodName = "/calculator.v1.CalculatorService/SubmitTaskResult"
 )
 
 // CalculatorServiceClient is the client API for CalculatorService service.
@@ -257,7 +257,7 @@ func _CalculatorService_SubmitTaskResult_Handler(srv interface{}, ctx context.Co
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var CalculatorService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "dist_calculate_api.calculator.v1.CalculatorService",
+	ServiceName: "calculator.v1.CalculatorService",
 	HandlerType: (*CalculatorServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -282,5 +282,5 @@ var CalculatorService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "dist_calculate_api/calculator/v1/calculator.proto",
+	Metadata: "calculator/v1/calculator.proto",
 }
