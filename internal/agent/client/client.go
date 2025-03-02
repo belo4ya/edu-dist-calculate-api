@@ -13,12 +13,14 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/timeout"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type CalculatorClient struct {
-	calculatorv1.CalculatorServiceClient
+	client calculatorv1.CalculatorServiceClient
 }
 
 func NewCalculatorClient(ctx context.Context, conf *config.Config) (*CalculatorClient, func(), error) {
@@ -41,7 +43,27 @@ func NewCalculatorClient(ctx context.Context, conf *config.Config) (*CalculatorC
 		}
 	}
 
-	return &CalculatorClient{CalculatorServiceClient: calculatorv1.NewCalculatorServiceClient(conn)}, cleanup, nil
+	return &CalculatorClient{client: calculatorv1.NewCalculatorServiceClient(conn)}, cleanup, nil
+}
+
+func (c *CalculatorClient) GetTask(ctx context.Context) (*calculatorv1.Task, error) {
+	resp, err := c.client.GetTask(ctx, nil)
+	if err != nil {
+		grpcStatus := status.Convert(err)
+		if grpcStatus.Code() == codes.NotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+	return resp.GetTask(), nil
+}
+
+func (c *CalculatorClient) SubmitResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error {
+	_, err := c.client.SubmitTaskResult(ctx, res)
+	if err != nil {
+		return fmt.Errorf("submit task result: %w", err)
+	}
+	return nil
 }
 
 func WithCommonGRPCDialOptions(opts ...grpc.DialOption) []grpc.DialOption {

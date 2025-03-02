@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"math"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/client"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/config"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 )
 
 type Agent struct {
@@ -47,48 +47,25 @@ func (a *Agent) Start(ctx context.Context) error {
 
 func (a *Agent) worker(ctx context.Context, workerID int) {
 	log := a.log.With("worker_id", workerID)
-
 	log.InfoContext(ctx, "запуск воркера")
-
-	backoff := initialBackoff
-	jitter := func() time.Duration {
-		return time.Duration(rand.Int63n(int64(100 * time.Millisecond)))
-	}
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.InfoContext(ctx, "завершение работы воркера")
 			return
 		default:
-			// Получение задачи от оркестратора
-			resp, err := a.client.GetTask(ctx, nil)
+			task, err := a.fetchTask(ctx, log)
 			if err != nil {
-				log.WarnContext(ctx, "ошибка при запросе задачи", "error", err)
-				time.Sleep(backoff + jitter())
-				backoff = minDuration(backoff*2, maxBackoff)
 				continue
 			}
 
-			// Сбрасываем backoff при наличии задачи
-			backoff = initialBackoff
-
-			// Обработка полученной задачи
-			task := resp.GetTask()
-
 			log = log.With("task_id", task.Id)
-			log.InfoContext(ctx, "получена задача")
+			log.InfoContext(ctx, "выполнение задачи")
 
-			// Вычисление результата
 			result := a.executeTask(task)
 
-			// Отправка результата оркестратору
-			_, err = a.client.SubmitTaskResult(ctx, &calculatorv1.SubmitTaskResultRequest{
-				Id:     task.Id,
-				Result: result,
-			})
-
-			if err != nil {
-				log.ErrorContext(ctx, "ошибка при отправке результата задачи", "error", err)
+			if err := a.submitTaskResult(ctx, log, task.Id, result); err != nil {
 				continue
 			}
 
@@ -97,16 +74,59 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 	}
 }
 
-const (
-	initialBackoff = 100 * time.Millisecond
-	maxBackoff     = 5 * time.Second
-)
+// fetchTask получает задачу от оркестратора с повторами при ошибках
+func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.Task, error) {
+	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
 
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
+	for attempt := 1; ; attempt++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			task, err := a.client.GetTask(ctx)
+			if err != nil || task == nil {
+				log.WarnContext(ctx, "ошибка при запросе задачи", "error", err, "attempt", attempt)
+				time.Sleep(backoff(attempt))
+				continue
+			}
+			if task == nil {
+				log.DebugContext(ctx, "нет доступных задач")
+				time.Sleep(backoff(attempt))
+				continue
+			}
+
+			return task, nil
+		}
 	}
-	return b
+}
+
+// submitTaskResult отправляет результат задачи с повторами при ошибках
+func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID string, result float64) error {
+	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
+
+	req := &calculatorv1.SubmitTaskResultRequest{
+		Id:     taskID,
+		Result: result,
+	}
+
+	for attempt := 1; ; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if err := a.client.SubmitResult(ctx, req); err != nil {
+				log.WarnContext(ctx, "ошибка при отправке результата задачи", "error", err, "attempt", attempt)
+				time.Sleep(backoff(attempt))
+			}
+		}
+	}
+}
+
+func backoffExponentialWithJitter(dur time.Duration, cap time.Duration, jitter float64) func(int) time.Duration {
+	f := retry.BackoffExponentialWithJitter(dur, jitter)
+	return func(attempt int) time.Duration {
+		return min(f(context.Background(), uint(attempt)), cap)
+	}
 }
 
 func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
