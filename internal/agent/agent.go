@@ -88,7 +88,6 @@ func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
 	return ops[task.Operation](arg1, arg2)
 }
 
-// fetchTask получает задачу от оркестратора с повторами при ошибках
 func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.Task, error) {
 	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
 
@@ -114,7 +113,6 @@ func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.
 	}
 }
 
-// submitTaskResult отправляет результат задачи с повторами при ошибках
 func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID string, result float64) error {
 	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
 
@@ -131,7 +129,9 @@ func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID s
 			if err := a.client.SubmitTaskResult(ctx, req); err != nil {
 				log.ErrorContext(ctx, "ошибка при отправке результата задачи", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
+				continue
 			}
+			return nil
 		}
 	}
 }

@@ -15,7 +15,7 @@ func Configure(conf *Config) error {
 		return err
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
+		AddSource: false,
 		Level:     lvl,
 	}))
 	slog.SetDefault(log)
