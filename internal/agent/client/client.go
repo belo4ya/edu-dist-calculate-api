@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
@@ -24,17 +23,23 @@ type CalculatorClient struct {
 }
 
 func NewCalculatorClient(ctx context.Context, conf *config.Config) (*CalculatorClient, func(), error) {
+	clientMetrics := grpcprom.NewClientMetrics(grpcprom.WithClientHandlingTimeHistogram())
+	prometheus.MustRegister(clientMetrics)
+
 	conn, err := grpc.NewClient(
 		conf.CalculatorAddr,
-		WithCommonGRPCDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials()))...,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(
+			timeout.UnaryClientInterceptor(10*time.Second),
+			retry.UnaryClientInterceptor(
+				retry.WithMax(3),
+				retry.WithBackoff(retry.BackoffExponentialWithJitter(200*time.Millisecond, 0.1)),
+			),
+			clientMetrics.UnaryClientInterceptor(),
+		),
 	)
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("init grpc client: %w", err)
-	}
-
-	slog.InfoContext(ctx, "connecting to calculator", "addr", conf.CalculatorAddr)
-	if err := WaitForReadyGRPCConnection(ctx, conf.GrpcClientConnectTimeout, conn); err != nil {
-		return nil, func() {}, fmt.Errorf("wait for ready grpc conn: %w", err)
 	}
 
 	cleanup := func() {
@@ -58,47 +63,10 @@ func (c *CalculatorClient) GetTask(ctx context.Context) (*calculatorv1.Task, err
 	return resp.GetTask(), nil
 }
 
-func (c *CalculatorClient) SubmitResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error {
+func (c *CalculatorClient) SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error {
 	_, err := c.client.SubmitTaskResult(ctx, res)
 	if err != nil {
 		return fmt.Errorf("submit task result: %w", err)
 	}
 	return nil
-}
-
-func WithCommonGRPCDialOptions(opts ...grpc.DialOption) []grpc.DialOption {
-	return append(CommonGRPCDialOptions(), opts...)
-}
-
-func CommonGRPCDialOptions() []grpc.DialOption {
-	clientMetrics := grpcprom.NewClientMetrics(grpcprom.WithClientHandlingTimeHistogram())
-	prometheus.MustRegister(clientMetrics)
-
-	return []grpc.DialOption{
-		grpc.WithChainUnaryInterceptor(
-			timeout.UnaryClientInterceptor(10*time.Second),
-			retry.UnaryClientInterceptor(
-				retry.WithMax(3),
-				retry.WithBackoff(retry.BackoffExponentialWithJitter(200*time.Millisecond, 0.1)),
-			),
-			clientMetrics.UnaryClientInterceptor(),
-		),
-	}
-}
-
-func WaitForReadyGRPCConnection(ctx context.Context, timeout time.Duration, conn *grpc.ClientConn) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	for {
-		state := conn.GetState()
-		if state == connectivity.Ready {
-			return nil
-		}
-		if state == connectivity.Idle {
-			conn.Connect()
-		}
-		if !conn.WaitForStateChange(ctx, state) {
-			return fmt.Errorf("connect to %s (%s): %w", conn.Target(), state.String(), ctx.Err())
-		}
-	}
 }

@@ -8,19 +8,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/client"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/config"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 )
 
+type TaskClient interface {
+	GetTask(ctx context.Context) (*calculatorv1.Task, error)
+	SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error
+}
+
 type Agent struct {
 	conf   *config.Config
-	client *client.CalculatorClient
+	client TaskClient
 	log    *slog.Logger
 }
 
-func New(conf *config.Config, c *client.CalculatorClient) *Agent {
+func New(conf *config.Config, c TaskClient) *Agent {
 	return &Agent{
 		conf:   conf,
 		client: c,
@@ -61,7 +65,7 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 			}
 
 			log = log.With("task_id", task.Id)
-			log.InfoContext(ctx, "выполнение задачи")
+			log.DebugContext(ctx, "выполнение задачи")
 
 			result := a.executeTask(task)
 
@@ -69,9 +73,19 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 				continue
 			}
 
-			log.InfoContext(ctx, "задача выполнена успешно", "result", result)
+			log.DebugContext(ctx, "задача выполнена успешно", "result", result)
 		}
 	}
+}
+
+func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
+	arg1, err1 := strconv.ParseFloat(task.Arg1, 64)
+	arg2, err2 := strconv.ParseFloat(task.Arg2, 64)
+	if err1 != nil || err2 != nil {
+		return math.NaN()
+	}
+	time.Sleep(task.OperationTime.AsDuration())
+	return ops[task.Operation](arg1, arg2)
 }
 
 // fetchTask получает задачу от оркестратора с повторами при ошибках
@@ -84,14 +98,14 @@ func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.
 			return nil, ctx.Err()
 		default:
 			task, err := a.client.GetTask(ctx)
-			if err != nil || task == nil {
-				log.WarnContext(ctx, "ошибка при запросе задачи", "error", err, "attempt", attempt)
+			if err != nil {
+				log.ErrorContext(ctx, "ошибка при запросе задачи", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 				continue
 			}
 			if task == nil {
 				log.DebugContext(ctx, "нет доступных задач")
-				time.Sleep(backoff(attempt))
+				time.Sleep(5 * time.Second)
 				continue
 			}
 
@@ -114,8 +128,8 @@ func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID s
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if err := a.client.SubmitResult(ctx, req); err != nil {
-				log.WarnContext(ctx, "ошибка при отправке результата задачи", "error", err, "attempt", attempt)
+			if err := a.client.SubmitTaskResult(ctx, req); err != nil {
+				log.ErrorContext(ctx, "ошибка при отправке результата задачи", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 			}
 		}
@@ -127,16 +141,6 @@ func backoffExponentialWithJitter(dur time.Duration, cap time.Duration, jitter f
 	return func(attempt int) time.Duration {
 		return min(f(context.Background(), uint(attempt)), cap)
 	}
-}
-
-func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
-	arg1, err1 := strconv.ParseFloat(task.Arg1, 64)
-	arg2, err2 := strconv.ParseFloat(task.Arg2, 64)
-	if err1 != nil || err2 != nil {
-		return math.NaN()
-	}
-	time.Sleep(task.OperationTime.AsDuration())
-	return ops[task.Operation](arg1, arg2)
 }
 
 var ops = map[calculatorv1.Operation]func(float64, float64) float64{
