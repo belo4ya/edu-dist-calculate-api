@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	GRPCAddr int `env:"GRPC_ADDR"`
-	HTTPAddr int `env:"HTTP_ADDR"`
-	MGMTAddr int `env:"MGMT_ADDR"`
+	LogLevel string `env:"LOG_LEVEL"`
+	GRPCAddr string `env:"GRPC_ADDR"`
+	HTTPAddr string `env:"HTTP_ADDR"`
+	MgmtAddr string `env:"MGMT_ADDR"`
 
 	TimeAdditionMs       int `env:"TIME_ADDITION_MS"`
 	TimeSubtractionMs    int `env:"TIME_SUBTRACTION_MS"`

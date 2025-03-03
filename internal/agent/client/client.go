@@ -18,16 +18,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type CalculatorClient struct {
-	client calculatorv1.CalculatorServiceClient
+type AgentAPI struct {
+	client calculatorv1.AgentServiceClient
 }
 
-func NewCalculatorClient(ctx context.Context, conf *config.Config) (*CalculatorClient, func(), error) {
+func NewAgentAPI(ctx context.Context, conf *config.Config) (*AgentAPI, func(), error) {
 	clientMetrics := grpcprom.NewClientMetrics(grpcprom.WithClientHandlingTimeHistogram())
 	prometheus.MustRegister(clientMetrics)
 
 	conn, err := grpc.NewClient(
-		conf.CalculatorAddr,
+		conf.CalculatorAPIAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithChainUnaryInterceptor(
 			timeout.UnaryClientInterceptor(10*time.Second),
@@ -48,10 +48,10 @@ func NewCalculatorClient(ctx context.Context, conf *config.Config) (*CalculatorC
 		}
 	}
 
-	return &CalculatorClient{client: calculatorv1.NewCalculatorServiceClient(conn)}, cleanup, nil
+	return &AgentAPI{client: calculatorv1.NewAgentServiceClient(conn)}, cleanup, nil
 }
 
-func (c *CalculatorClient) GetTask(ctx context.Context) (*calculatorv1.Task, error) {
+func (c *AgentAPI) GetTask(ctx context.Context) (*calculatorv1.Task, error) {
 	resp, err := c.client.GetTask(ctx, nil)
 	if err != nil {
 		grpcStatus := status.Convert(err)
@@ -63,7 +63,7 @@ func (c *CalculatorClient) GetTask(ctx context.Context) (*calculatorv1.Task, err
 	return resp.GetTask(), nil
 }
 
-func (c *CalculatorClient) SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error {
+func (c *AgentAPI) SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error {
 	_, err := c.client.SubmitTaskResult(ctx, res)
 	if err != nil {
 		return fmt.Errorf("submit task result: %w", err)

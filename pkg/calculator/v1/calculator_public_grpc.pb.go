@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: calculator/v1/calculator.proto
+// source: calculator/v1/calculator_public.proto
 
 package v1
 
@@ -20,18 +20,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CalculatorService_Calculate_FullMethodName        = "/calculator.v1.CalculatorService/Calculate"
-	CalculatorService_ListExpressions_FullMethodName  = "/calculator.v1.CalculatorService/ListExpressions"
-	CalculatorService_GetExpression_FullMethodName    = "/calculator.v1.CalculatorService/GetExpression"
-	CalculatorService_GetTask_FullMethodName          = "/calculator.v1.CalculatorService/GetTask"
-	CalculatorService_SubmitTaskResult_FullMethodName = "/calculator.v1.CalculatorService/SubmitTaskResult"
+	CalculatorService_Calculate_FullMethodName       = "/calculator.v1.CalculatorService/Calculate"
+	CalculatorService_ListExpressions_FullMethodName = "/calculator.v1.CalculatorService/ListExpressions"
+	CalculatorService_GetExpression_FullMethodName   = "/calculator.v1.CalculatorService/GetExpression"
 )
 
 // CalculatorServiceClient is the client API for CalculatorService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Calculator service
+// Public Calculator service
 type CalculatorServiceClient interface {
 	// Add arithmetic expression for calculation
 	Calculate(ctx context.Context, in *CalculateRequest, opts ...grpc.CallOption) (*CalculateResponse, error)
@@ -39,10 +37,6 @@ type CalculatorServiceClient interface {
 	ListExpressions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListExpressionsResponse, error)
 	// Get expression by its identifier
 	GetExpression(ctx context.Context, in *GetExpressionRequest, opts ...grpc.CallOption) (*GetExpressionResponse, error)
-	// Get task for execution (for agents)
-	GetTask(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTaskResponse, error)
-	// Submit task processing result (from agents)
-	SubmitTaskResult(ctx context.Context, in *SubmitTaskResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type calculatorServiceClient struct {
@@ -83,31 +77,11 @@ func (c *calculatorServiceClient) GetExpression(ctx context.Context, in *GetExpr
 	return out, nil
 }
 
-func (c *calculatorServiceClient) GetTask(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTaskResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTaskResponse)
-	err := c.cc.Invoke(ctx, CalculatorService_GetTask_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *calculatorServiceClient) SubmitTaskResult(ctx context.Context, in *SubmitTaskResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, CalculatorService_SubmitTaskResult_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // CalculatorServiceServer is the server API for CalculatorService service.
 // All implementations should embed UnimplementedCalculatorServiceServer
 // for forward compatibility.
 //
-// Calculator service
+// Public Calculator service
 type CalculatorServiceServer interface {
 	// Add arithmetic expression for calculation
 	Calculate(context.Context, *CalculateRequest) (*CalculateResponse, error)
@@ -115,10 +89,6 @@ type CalculatorServiceServer interface {
 	ListExpressions(context.Context, *emptypb.Empty) (*ListExpressionsResponse, error)
 	// Get expression by its identifier
 	GetExpression(context.Context, *GetExpressionRequest) (*GetExpressionResponse, error)
-	// Get task for execution (for agents)
-	GetTask(context.Context, *emptypb.Empty) (*GetTaskResponse, error)
-	// Submit task processing result (from agents)
-	SubmitTaskResult(context.Context, *SubmitTaskResultRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedCalculatorServiceServer should be embedded to have
@@ -136,12 +106,6 @@ func (UnimplementedCalculatorServiceServer) ListExpressions(context.Context, *em
 }
 func (UnimplementedCalculatorServiceServer) GetExpression(context.Context, *GetExpressionRequest) (*GetExpressionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetExpression not implemented")
-}
-func (UnimplementedCalculatorServiceServer) GetTask(context.Context, *emptypb.Empty) (*GetTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTask not implemented")
-}
-func (UnimplementedCalculatorServiceServer) SubmitTaskResult(context.Context, *SubmitTaskResultRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SubmitTaskResult not implemented")
 }
 func (UnimplementedCalculatorServiceServer) testEmbeddedByValue() {}
 
@@ -217,42 +181,6 @@ func _CalculatorService_GetExpression_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CalculatorService_GetTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CalculatorServiceServer).GetTask(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CalculatorService_GetTask_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CalculatorServiceServer).GetTask(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _CalculatorService_SubmitTaskResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubmitTaskResultRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CalculatorServiceServer).SubmitTaskResult(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CalculatorService_SubmitTaskResult_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CalculatorServiceServer).SubmitTaskResult(ctx, req.(*SubmitTaskResultRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // CalculatorService_ServiceDesc is the grpc.ServiceDesc for CalculatorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -272,15 +200,7 @@ var CalculatorService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetExpression",
 			Handler:    _CalculatorService_GetExpression_Handler,
 		},
-		{
-			MethodName: "GetTask",
-			Handler:    _CalculatorService_GetTask_Handler,
-		},
-		{
-			MethodName: "SubmitTaskResult",
-			Handler:    _CalculatorService_SubmitTaskResult_Handler,
-		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "calculator/v1/calculator.proto",
+	Metadata: "calculator/v1/calculator_public.proto",
 }

@@ -41,17 +41,17 @@ func run() error {
 	slog.InfoContext(ctx, "logger is configured")
 	slog.InfoContext(ctx, "config initialized", "config", conf)
 
-	calculatorClient, cleanup, err := client.NewCalculatorClient(ctx, conf)
+	calculatorClient, cleanup, err := client.NewAgentAPI(ctx, conf)
 	if err != nil {
 		return fmt.Errorf("create calculator client: %w", err)
 	}
 	defer cleanup()
 
-	mgmt := mgmtserver.New(&mgmtserver.Config{Addr: conf.MgmtAddr})
+	mgmtSrv := mgmtserver.New(&mgmtserver.Config{Addr: conf.MgmtAddr})
 
 	_agent := agent.New(conf, calculatorClient)
 
-	runy.Add(mgmt, _agent)
+	runy.Add(mgmtSrv, _agent)
 	if err := runy.Start(ctx); err != nil {
 		return fmt.Errorf("problem with running app: %w", err)
 	}

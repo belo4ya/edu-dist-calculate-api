@@ -12,22 +12,22 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 )
 
-type TaskClient interface {
+type CalculatorAgentAPIClient interface {
 	GetTask(ctx context.Context) (*calculatorv1.Task, error)
 	SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error
 }
 
 type Agent struct {
 	conf   *config.Config
-	client TaskClient
+	client CalculatorAgentAPIClient
 	log    *slog.Logger
 }
 
-func New(conf *config.Config, c TaskClient) *Agent {
+func New(conf *config.Config, c CalculatorAgentAPIClient) *Agent {
 	return &Agent{
 		conf:   conf,
 		client: c,
-		log:    slog.Default().With("logger", "agent"),
+		log:    slog.With("logger", "agent"),
 	}
 }
 
@@ -55,7 +55,7 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.InfoContext(ctx, "worker shutdown")
+			log.InfoContext(ctx, "worker stopped")
 			return
 		default:
 			task, err := a.fetchTask(ctx, log)
@@ -107,12 +107,12 @@ func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.
 		default:
 			task, err := a.client.GetTask(ctx)
 			if err != nil {
-				log.ErrorContext(ctx, "error fetching task", "error", err, "attempt", attempt)
+				log.ErrorContext(ctx, "failed to fetch task", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 				continue
 			}
 			if task == nil {
-				log.DebugContext(ctx, "no available tasks")
+				log.DebugContext(ctx, "no tasks available")
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -136,7 +136,7 @@ func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID s
 			return ctx.Err()
 		default:
 			if err := a.client.SubmitTaskResult(ctx, req); err != nil {
-				log.ErrorContext(ctx, "error submitting task result", "error", err, "attempt", attempt)
+				log.ErrorContext(ctx, "failed to submit result", "error", err, "attempt", attempt)
 				time.Sleep(backoff(attempt))
 				continue
 			}

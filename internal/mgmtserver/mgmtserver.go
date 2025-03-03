@@ -34,7 +34,7 @@ func New(conf *Config) *MGMTServer {
 func (s *MGMTServer) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, fmt.Sprintf("Mgmt server start listening on: %s", s.conf.Addr))
+		slog.InfoContext(ctx, fmt.Sprintf("mgmt server start listening on: %s", s.conf.Addr))
 		if err := s.HTTP.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("start http server: %w", err)
 		}
@@ -44,7 +44,7 @@ func (s *MGMTServer) Start(ctx context.Context) error {
 	case <-ctx.Done():
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		slog.InfoContext(ctx, "shutting down Mgmt server")
+		slog.InfoContext(ctx, "shutting down mgmt server")
 		if err := s.HTTP.Shutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown http server: %w", err)
 		}

@@ -1,10 +1,13 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "calculator/v1/calculator.proto",
+    "title": "calculator/v1/calculator_agent.proto",
     "version": "version not set"
   },
   "tags": [
+    {
+      "name": "AgentService"
+    },
     {
       "name": "CalculatorService"
     }
@@ -106,7 +109,7 @@
     "/internal/task": {
       "get": {
         "summary": "Get task for execution (for agents)",
-        "operationId": "CalculatorService_GetTask",
+        "operationId": "AgentService_GetTask",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -122,12 +125,12 @@
           }
         },
         "tags": [
-          "CalculatorService"
+          "AgentService"
         ]
       },
       "post": {
         "summary": "Submit task processing result (from agents)",
-        "operationId": "CalculatorService_SubmitTaskResult",
+        "operationId": "AgentService_SubmitTaskResult",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -154,7 +157,7 @@
           }
         ],
         "tags": [
-          "CalculatorService"
+          "AgentService"
         ]
       }
     }

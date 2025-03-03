@@ -7,18 +7,18 @@ import (
 )
 
 type Config struct {
-	LogLevel       string `env:"LOG_LEVEL"`
-	MgmtAddr       string `env:"MGMT_ADDR"`
-	CalculatorAddr string `env:"CALCULATOR_ADDR"`
-	ComputingPower int    `env:"COMPUTING_POWER"`
+	LogLevel          string `env:"LOG_LEVEL"`
+	MgmtAddr          string `env:"MGMT_ADDR"`
+	CalculatorAPIAddr string `env:"CALCULATOR_API_ADDR"`
+	ComputingPower    int    `env:"COMPUTING_POWER"`
 }
 
 func Load() (*Config, error) {
 	conf := &Config{
-		LogLevel:       "info",
-		MgmtAddr:       ":8081",
-		CalculatorAddr: ":50051",
-		ComputingPower: 10,
+		LogLevel:          "info",
+		MgmtAddr:          ":8081",
+		CalculatorAPIAddr: ":50051",
+		ComputingPower:    10,
 	}
 	if err := env.Parse(conf); err != nil {
 		return nil, fmt.Errorf("env parse: %w", err)
