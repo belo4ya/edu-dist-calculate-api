@@ -34,7 +34,7 @@ func New(conf *Config) *MGMTServer {
 func (s *MGMTServer) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, fmt.Sprintf("mgmt server start listening on: %s", s.conf.Addr))
+		slog.InfoContext(ctx, "mgmt server start listening on"+s.conf.Addr)
 		if err := s.HTTP.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("start http server: %w", err)
 		}

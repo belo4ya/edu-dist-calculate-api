@@ -6,6 +6,7 @@ import (
 
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,6 +28,10 @@ func NewAgentService(conf *config.Config) *AgentService {
 
 func (s *AgentService) Register(srv *grpc.Server) {
 	calculatorv1.RegisterAgentServiceServer(srv, s)
+}
+
+func (s *AgentService) RegisterGRPCGateway(ctx context.Context, mux *runtime.ServeMux, addr string, clientOpts []grpc.DialOption) error {
+	return calculatorv1.RegisterAgentServiceHandlerFromEndpoint(ctx, mux, addr, clientOpts)
 }
 
 func (s *AgentService) GetTask(context.Context, *emptypb.Empty) (*calculatorv1.GetTaskResponse, error) {

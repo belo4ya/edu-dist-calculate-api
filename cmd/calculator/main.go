@@ -13,6 +13,8 @@ import (
 	"github.com/belo4ya/edu-dist-calculate-api/internal/mgmtserver"
 	"github.com/belo4ya/runy"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -45,11 +47,19 @@ func run() error {
 	grpcSrv := server.NewGRPCServer(conf)
 	httpSrv := server.NewHTTPServer(conf)
 
+	clientOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
 	calcSvc := service.NewCalculatorService(conf)
 	calcSvc.Register(grpcSrv.GRPC)
+	if err := calcSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
+		return fmt.Errorf("calculator service: register grpc gateway: %w", err)
+	}
 
 	agentSvc := service.NewAgentService(conf)
 	agentSvc.Register(grpcSrv.GRPC)
+	if err := agentSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
+		return fmt.Errorf("agent service: register grpc gateway: %w", err)
+	}
 
 	runy.Add(mgmtSrv, grpcSrv, httpSrv)
 	if err := runy.Start(ctx); err != nil {

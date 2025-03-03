@@ -9,26 +9,31 @@ import (
 	"time"
 
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 type HTTPServer struct {
 	HTTP *http.Server
+	Mux  *runtime.ServeMux
 	conf *config.Config
 }
 
 func NewHTTPServer(conf *config.Config) *HTTPServer {
-	srv := &HTTPServer{conf: conf}
-	srv.HTTP = &http.Server{
-		Addr: conf.HTTPAddr,
-		//Handler: nil,
+	mux := runtime.NewServeMux()
+	return &HTTPServer{
+		HTTP: &http.Server{
+			Addr:    conf.HTTPAddr,
+			Handler: mux,
+		},
+		Mux:  mux,
+		conf: conf,
 	}
-	return srv
 }
 
 func (s *HTTPServer) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, fmt.Sprintf("http server start listening on: %s", s.conf.HTTPAddr))
+		slog.InfoContext(ctx, "http server start listening on"+s.conf.HTTPAddr)
 		if err := s.HTTP.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("start http server: %w", err)
 		}

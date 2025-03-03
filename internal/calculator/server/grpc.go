@@ -45,7 +45,7 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, fmt.Sprintf("GRPC server start listening on: %s", s.conf.GRPCAddr))
+		slog.InfoContext(ctx, "GRPC server start listening on"+s.conf.GRPCAddr)
 		if err := s.GRPC.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("start grpc server: %w", err)
 		}
