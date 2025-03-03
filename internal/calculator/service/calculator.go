@@ -31,7 +31,7 @@ func (s *CalculatorService) Register(srv *grpc.Server) {
 }
 
 func (s *CalculatorService) RegisterGRPCGateway(ctx context.Context, mux *runtime.ServeMux, addr string, clientOpts []grpc.DialOption) error {
-	return calculatorv1.RegisterCalculatorServiceHandlerFromEndpoint(ctx, mux, addr, clientOpts)
+	return calculatorv1.RegisterCalculatorServiceHandlerFromEndpoint(ctx, mux, "localhost"+addr, clientOpts)
 }
 
 func (s *CalculatorService) Calculate(context.Context, *calculatorv1.CalculateRequest) (*calculatorv1.CalculateResponse, error) {

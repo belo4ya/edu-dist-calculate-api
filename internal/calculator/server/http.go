@@ -33,7 +33,7 @@ func NewHTTPServer(conf *config.Config) *HTTPServer {
 func (s *HTTPServer) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, "http server start listening on"+s.conf.HTTPAddr)
+		slog.InfoContext(ctx, "http server start listening on "+s.conf.HTTPAddr)
 		if err := s.HTTP.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("start http server: %w", err)
 		}

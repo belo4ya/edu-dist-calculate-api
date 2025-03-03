@@ -45,7 +45,7 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, "GRPC server start listening on"+s.conf.GRPCAddr)
+		slog.InfoContext(ctx, "grpc server start listening on "+s.conf.GRPCAddr)
 		if err := s.GRPC.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("start grpc server: %w", err)
 		}
@@ -54,7 +54,7 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		slog.InfoContext(ctx, "shutting down GRPC server")
+		slog.InfoContext(ctx, "shutting down grpc server")
 		s.GRPC.GracefulStop()
 		return nil
 	case err := <-errCh:

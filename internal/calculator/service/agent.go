@@ -31,7 +31,7 @@ func (s *AgentService) Register(srv *grpc.Server) {
 }
 
 func (s *AgentService) RegisterGRPCGateway(ctx context.Context, mux *runtime.ServeMux, addr string, clientOpts []grpc.DialOption) error {
-	return calculatorv1.RegisterAgentServiceHandlerFromEndpoint(ctx, mux, addr, clientOpts)
+	return calculatorv1.RegisterAgentServiceHandlerFromEndpoint(ctx, mux, "localhost"+addr, clientOpts)
 }
 
 func (s *AgentService) GetTask(context.Context, *emptypb.Empty) (*calculatorv1.GetTaskResponse, error) {
