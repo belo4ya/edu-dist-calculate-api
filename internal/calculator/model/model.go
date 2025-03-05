@@ -1,50 +1,69 @@
 package model
 
-import (
-	"time"
+var (
+	// StatusCalculate указываеь таски, над которыми сейчас работает воркер
+	StatusCalculate = "calculating"
 
-	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
+	// StatusFailed указывает, что выражение не решено. Причиной может быть его некорректность
+	StatusFailed = "failed"
+
+	// StatusResolved указывает в БД, что результат выражения подсчитан успешно
+	StatusResolved = "done"
+
+	// StatusWait указывает на те выражения в БД, результат которых еще не подсчитан
+	StatusWait = "awaiting processing"
 )
 
-// ExpressionNode представляет узел в дереве выражения
-type ExpressionNode struct {
-	ID         string                        // Уникальный идентификатор узла
-	ParentID   string                        // Идентификатор родительского узла (если есть)
-	Type       string                        // Тип узла: "operation" или "value"
-	Operation  calculatorv1.Operation        // Операция (если тип - "operation")
-	Value      float64                       // Значение (если тип - "value")
-	LeftChild  string                        // ID левого потомка (для операций)
-	RightChild string                        // ID правого потомка (для операций)
-	TaskID     string                        // ID связанной задачи (для операций)
-	Status     calculatorv1.ExpressionStatus // Статус этого узла
+// ErrorResponse - структура ответа, возвращаемого при ошибке вычислений
+type ErrorResponse struct {
+	Error        string `json:"error"`
+	ErrorMessage string `json:"error_message"`
 }
 
-// Expression представляет арифметическое выражение
+// Expression - структура математического выражения
 type Expression struct {
-	ID          string                        // Уникальный идентификатор выражения
-	Text        string                        // Исходный текст выражения
-	RootNodeID  string                        // ID корневого узла дерева выражения
-	Status      calculatorv1.ExpressionStatus // Общий статус выражения
-	Result      *float64                      // Результат вычисления (если есть)
-	Nodes       map[string]*ExpressionNode    // Все узлы дерева выражения
-	CreatedAt   time.Time                     // Время создания выражения
-	CompletedAt *time.Time                    // Время завершения вычисления (если есть)
+	ID           int     `json:"id"`
+	Expression   string  `json:"expression"`
+	Status       string  `json:"status"`
+	Result       float64 `json:"result"`
+	ErrorMessage string  `json:"error_message"`
 }
 
-// Task представляет элементарную задачу для вычисления
+// RegisteredExpression - структура ответа, возвращаемого при регистрации выражения в оркестраторе
+type RegisteredExpression struct {
+	ID int `json:"id"`
+}
+
+// Request - структура запроса
+type Request struct {
+	Expression string `json:"expression"`
+}
+
+// Response - струтура ответа после успешного завершения программы
+type Response struct {
+	Expression Expression `json:"expression"`
+}
+
+// Task описывает задачу для выполнения
 type Task struct {
-	ID            string                 // Уникальный идентификатор задачи
-	ExpressionID  string                 // ID выражения, к которому относится задача
-	NodeID        string                 // ID узла выражения, к которому относится задача
-	Arg1          float64                // Первый аргумент
-	Arg2          float64                // Второй аргумент
-	Operation     calculatorv1.Operation // Операция
-	OperationTime time.Duration          // Время выполнения операции
-	Result        *float64               // Результат выполнения (если есть)
-	Status        string                 // Статус задачи: "pending", "in_progress", "completed", "failed"
-	DependsOn     []string               // Список ID задач, от которых зависит эта задача
-	CreatedAt     time.Time              // Время создания задачи
-	AssignedAt    *time.Time             // Время назначения задачи агенту
-	CompletedAt   *time.Time             // Время завершения выполнения задачи
-	AgentID       string                 // ID агента, который выполняет задачу (если назначена)
+	ID           int     `json:"ID"`
+	ExpressionID int     `json:"ExpressionID"`
+	Arg1         float64 `json:"Arg1"`
+	Arg2         float64 `json:"Arg2"`
+	PrevTaskID1  int     `json:"PrevTaskID1"`
+	PrevTaskID2  int     `json:"PrevTaskID2"`
+	Operation    string  `json:"Operation"`
+	Status       string  `json:"Status"`
+	Result       float64 `json:"Result"`
+}
+
+// TaskResponse - структура, содержащая одну таску
+type TaskResponse struct {
+	Task Task `json:"task"`
+}
+
+// Token - структура токена, на которые разбивается исходное выражение
+type Token struct {
+	Value    string
+	IsNumber bool
 }

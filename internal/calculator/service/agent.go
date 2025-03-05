@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/model"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -13,16 +16,23 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+type AgentRepository interface {
+	GetTask(context.Context) (model.Task, error)
+	UpdateTask(context.Context, *calculatorv1.SubmitTaskResultRequest) error
+}
+
 type AgentService struct {
 	calculatorv1.UnimplementedAgentServiceServer
 	conf *config.Config
 	log  *slog.Logger
+	repo AgentRepository
 }
 
-func NewAgentService(conf *config.Config) *AgentService {
+func NewAgentService(conf *config.Config, repo AgentRepository) *AgentService {
 	return &AgentService{
 		conf: conf,
-		log:  slog.With("logger", "agent-svc"),
+		log:  slog.With("logger", "agent-service"),
+		repo: repo,
 	}
 }
 
@@ -34,10 +44,28 @@ func (s *AgentService) RegisterGRPCGateway(ctx context.Context, mux *runtime.Ser
 	return calculatorv1.RegisterAgentServiceHandlerFromEndpoint(ctx, mux, "localhost"+addr, clientOpts)
 }
 
-func (s *AgentService) GetTask(context.Context, *emptypb.Empty) (*calculatorv1.GetTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTask not implemented")
+func (s *AgentService) GetTask(ctx context.Context, _ *emptypb.Empty) (*calculatorv1.GetTaskResponse, error) {
+	task, err := s.repo.GetTask(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "no tasks yet, try later")
+		}
+		return nil, InternalError(err)
+	}
+
+	_ = task
+	return &calculatorv1.GetTaskResponse{Task: &calculatorv1.Task{
+		Id:            "",
+		Arg1:          0,
+		Arg2:          0,
+		Operation:     0,
+		OperationTime: nil,
+	}}, nil
 }
 
-func (s *AgentService) SubmitTaskResult(context.Context, *calculatorv1.SubmitTaskResultRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SubmitTaskResult not implemented")
+func (s *AgentService) SubmitTaskResult(ctx context.Context, req *calculatorv1.SubmitTaskResultRequest) (*emptypb.Empty, error) {
+	if err := s.repo.UpdateTask(ctx, req); err != nil {
+		return nil, InternalError(err)
+	}
+	return &emptypb.Empty{}, nil
 }
