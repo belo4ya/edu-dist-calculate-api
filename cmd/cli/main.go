@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	s := "2 + 2 * 2 + (9 + 3) / 3"
+	s := "(2 + 2) + (1 + 1) * 3"
 
 	c := &calc.Calculator{}
 	rpn, err := c.Parse(s)

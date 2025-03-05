@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: calculator/v1/calculator_public.proto
+// source: calculator/v1/public.proto
 
 package v1
 
@@ -29,13 +29,13 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Public Calculator service
+// Handles calculation of arithmetic expressions.
 type CalculatorServiceClient interface {
-	// Add arithmetic expression for calculation
+	// Submits a new arithmetic expression for calculation.
 	Calculate(ctx context.Context, in *CalculateRequest, opts ...grpc.CallOption) (*CalculateResponse, error)
-	// Get list of expressions
+	// Returns all expressions.
 	ListExpressions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListExpressionsResponse, error)
-	// Get expression by its identifier
+	// Returns a specific expression by its identifier.
 	GetExpression(ctx context.Context, in *GetExpressionRequest, opts ...grpc.CallOption) (*GetExpressionResponse, error)
 }
 
@@ -81,13 +81,13 @@ func (c *calculatorServiceClient) GetExpression(ctx context.Context, in *GetExpr
 // All implementations should embed UnimplementedCalculatorServiceServer
 // for forward compatibility.
 //
-// Public Calculator service
+// Handles calculation of arithmetic expressions.
 type CalculatorServiceServer interface {
-	// Add arithmetic expression for calculation
+	// Submits a new arithmetic expression for calculation.
 	Calculate(context.Context, *CalculateRequest) (*CalculateResponse, error)
-	// Get list of expressions
+	// Returns all expressions.
 	ListExpressions(context.Context, *emptypb.Empty) (*ListExpressionsResponse, error)
-	// Get expression by its identifier
+	// Returns a specific expression by its identifier.
 	GetExpression(context.Context, *GetExpressionRequest) (*GetExpressionResponse, error)
 }
 
@@ -202,5 +202,5 @@ var CalculatorService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "calculator/v1/calculator_public.proto",
+	Metadata: "calculator/v1/public.proto",
 }

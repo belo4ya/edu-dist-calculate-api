@@ -18,7 +18,7 @@ func Load() (*Config, error) {
 		LogLevel:          "info",
 		MgmtAddr:          ":8082",
 		CalculatorAPIAddr: ":50051",
-		ComputingPower:    10,
+		ComputingPower:    4,
 	}
 	if err := env.Parse(conf); err != nil {
 		return nil, fmt.Errorf("env parse: %w", err)

@@ -27,7 +27,7 @@ func NewGRPCServer(conf *config.Config) *GRPCServer {
 	srv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			srvMetrics.UnaryServerInterceptor(),
-			GRPCLoggingUnaryServerInterceptor(),
+			grpcLoggingUnaryServerInterceptor(),
 		),
 	)
 	reflection.Register(srv)
@@ -62,7 +62,7 @@ func (s *GRPCServer) Start(ctx context.Context) error {
 	}
 }
 
-func GRPCLoggingUnaryServerInterceptor() grpc.UnaryServerInterceptor {
+func grpcLoggingUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	interceptorLogger := func() logging.Logger {
 		return logging.LoggerFunc(func(ctx context.Context, lvl logging.Level, msg string, fields ...any) {
 			log := slog.With(fields...)

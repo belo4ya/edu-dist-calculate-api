@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             (unknown)
-// source: calculator/v1/calculator_agent.proto
+// source: calculator/v1/agent.proto
 
 package v1
 
@@ -20,23 +20,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetTask_FullMethodName             = "/calculator.v1.AgentService/GetTask"
-	AgentService_SubmitTaskResult_FullMethodName    = "/calculator.v1.AgentService/SubmitTaskResult"
-	AgentService_ListExpressionTasks_FullMethodName = "/calculator.v1.AgentService/ListExpressionTasks"
+	AgentService_GetTask_FullMethodName          = "/calculator.v1.AgentService/GetTask"
+	AgentService_SubmitTaskResult_FullMethodName = "/calculator.v1.AgentService/SubmitTaskResult"
 )
 
 // AgentServiceClient is the client API for AgentService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Internal service for agent communication
+// Internal service for agent communication.
 type AgentServiceClient interface {
-	// Get task for execution (for agents)
+	// Get task for execution (for agents).
 	GetTask(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTaskResponse, error)
-	// Submit task processing result (from agents)
+	// Submit task processing result (from agents).
 	SubmitTaskResult(ctx context.Context, in *SubmitTaskResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Get list of expression's tasks (for debug)
-	ListExpressionTasks(ctx context.Context, in *ListExpressionTasksRequest, opts ...grpc.CallOption) (*ListExpressionTasksResponse, error)
 }
 
 type agentServiceClient struct {
@@ -67,28 +64,16 @@ func (c *agentServiceClient) SubmitTaskResult(ctx context.Context, in *SubmitTas
 	return out, nil
 }
 
-func (c *agentServiceClient) ListExpressionTasks(ctx context.Context, in *ListExpressionTasksRequest, opts ...grpc.CallOption) (*ListExpressionTasksResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListExpressionTasksResponse)
-	err := c.cc.Invoke(ctx, AgentService_ListExpressionTasks_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AgentServiceServer is the server API for AgentService service.
 // All implementations should embed UnimplementedAgentServiceServer
 // for forward compatibility.
 //
-// Internal service for agent communication
+// Internal service for agent communication.
 type AgentServiceServer interface {
-	// Get task for execution (for agents)
+	// Get task for execution (for agents).
 	GetTask(context.Context, *emptypb.Empty) (*GetTaskResponse, error)
-	// Submit task processing result (from agents)
+	// Submit task processing result (from agents).
 	SubmitTaskResult(context.Context, *SubmitTaskResultRequest) (*emptypb.Empty, error)
-	// Get list of expression's tasks (for debug)
-	ListExpressionTasks(context.Context, *ListExpressionTasksRequest) (*ListExpressionTasksResponse, error)
 }
 
 // UnimplementedAgentServiceServer should be embedded to have
@@ -103,9 +88,6 @@ func (UnimplementedAgentServiceServer) GetTask(context.Context, *emptypb.Empty) 
 }
 func (UnimplementedAgentServiceServer) SubmitTaskResult(context.Context, *SubmitTaskResultRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubmitTaskResult not implemented")
-}
-func (UnimplementedAgentServiceServer) ListExpressionTasks(context.Context, *ListExpressionTasksRequest) (*ListExpressionTasksResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListExpressionTasks not implemented")
 }
 func (UnimplementedAgentServiceServer) testEmbeddedByValue() {}
 
@@ -163,24 +145,6 @@ func _AgentService_SubmitTaskResult_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentService_ListExpressionTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListExpressionTasksRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).ListExpressionTasks(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_ListExpressionTasks_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).ListExpressionTasks(ctx, req.(*ListExpressionTasksRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -196,11 +160,7 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SubmitTaskResult",
 			Handler:    _AgentService_SubmitTaskResult_Handler,
 		},
-		{
-			MethodName: "ListExpressionTasks",
-			Handler:    _AgentService_ListExpressionTasks_Handler,
-		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "calculator/v1/calculator_agent.proto",
+	Metadata: "calculator/v1/agent.proto",
 }

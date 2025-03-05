@@ -2,44 +2,45 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/repository/modelv2"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/repository/models"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/rs/xid"
 )
 
+// Repository provides storage operations for calculator expressions and tasks.
 type Repository struct {
 	db *badger.DB
 }
 
+// New creates a new repository instance with the provided BadgerDB.
 func New(db *badger.DB) *Repository {
 	return &Repository{db: db}
 }
 
-var emptyVal = []byte{1}
-
+// CreateExpression stores a new expression with its associated tasks
+// and returns the ID of the created expression.
 func (r *Repository) CreateExpression(
 	_ context.Context,
-	cmd modelv2.CreateExpressionCmd,
-	tasksCmd []modelv2.CreateExpressionTaskCmd,
+	exprCmd models.CreateExpressionCmd,
+	tasksCmd []models.CreateExpressionTaskCmd,
 ) (string, error) {
-	now := time.Now().UTC()
+	timeNow := time.Now().UTC()
 
-	expr := modelv2.Expression{
+	expr := models.Expression{
 		ID:         xid.New().String(),
-		Expression: cmd.Expression,
-		Status:     modelv2.ExpressionStatusPending,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		Expression: exprCmd.Expression,
+		Status:     models.ExpressionStatusPending,
+		CreatedAt:  timeNow,
+		UpdatedAt:  timeNow,
 	}
 
-	tasks := make([]modelv2.Task, 0, len(tasksCmd))
+	tasks := make([]models.Task, 0, len(tasksCmd))
 	for _, t := range tasksCmd {
-		tasks = append(tasks, modelv2.Task{
+		tasks = append(tasks, models.Task{
 			ID:            t.ID,
 			ExpressionID:  expr.ID,
 			ParentTask1ID: t.ParentTask1ID,
@@ -47,47 +48,54 @@ func (r *Repository) CreateExpression(
 			Arg1:          t.Arg1,
 			Arg2:          t.Arg2,
 			Operation:     t.Operation,
-			Status:        modelv2.TaskStatusPending,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			OperationTime: t.OperationTime,
+			Status:        models.TaskStatusPending,
+			CreatedAt:     timeNow,
+			UpdatedAt:     timeNow,
 		})
 	}
 
+	taskToChildTask := map[string]string{}
+	for _, task := range tasks {
+		if task.ParentTask1ID != "" {
+			taskToChildTask[task.ParentTask1ID] = task.ID
+		}
+		if task.ParentTask2ID != "" {
+			taskToChildTask[task.ParentTask2ID] = task.ID
+		}
+	}
+
 	err := r.db.Update(func(txn *badger.Txn) error {
-		// Store expression data
-		exprData, err := json.Marshal(expr)
-		if err != nil {
-			return err
+		if err := setVal(txn, exprKey(expr.ID), expr); err != nil {
+			return fmt.Errorf("store expr: %w", err)
 		}
-		if err = txn.Set(exprKey(expr.ID), exprData); err != nil {
-			return err
+		if err := setVal(txn, exprListKey(expr.ID), expr.ID); err != nil {
+			return fmt.Errorf("add to expr list: %w", err)
 		}
 
-		// Add to expression list
-		if err = txn.Set(exprListKey(expr.ID), []byte(expr.ID)); err != nil {
-			return err
-		}
-
-		// Store tasks
 		for _, task := range tasks {
-			// Store individual task
-			taskData, err := json.Marshal(task)
-			if err != nil {
-				return err
+			if err := setVal(txn, taskKey(task.ID), task); err != nil {
+				return fmt.Errorf("store task: %w", err)
 			}
-			if err := txn.Set(taskKey(task.ID), taskData); err != nil {
-				return err
+			if err := setOnlyKey(txn, exprTaskKey(expr.ID, task.ID)); err != nil {
+				return fmt.Errorf("add to expr's task list: %w", err)
 			}
 
-			// Add to expression's task list
-			if err = txn.Set(exprTaskKey(expr.ID, task.ID), emptyVal); err != nil {
-				return err
+			// Set up task relationships - either mark as child task or final expression task
+			if childTaskID, ok := taskToChildTask[task.ID]; ok {
+				if err := setOnlyKey(txn, taskChildKey(task.ID, childTaskID)); err != nil {
+					return fmt.Errorf("set task's child task: %w", err)
+				}
+			} else {
+				if err := setOnlyKey(txn, exprFinalTaskKey(expr.ID, task.ID)); err != nil {
+					return fmt.Errorf("set expr's final task: %w", err)
+				}
 			}
 
-			// Add to pending task queue if it's ready to be executed
+			// Add root tasks (no parents) to the pending queue for immediate processing
 			if task.ParentTask1ID == "" && task.ParentTask2ID == "" {
-				if err = txn.Set(taskQueuePendingKey(task.ID), emptyVal); err != nil {
-					return err
+				if err := setOnlyKey(txn, taskQueuePendingKey(task.ID)); err != nil {
+					return fmt.Errorf("enque task: %w", err)
 				}
 			}
 		}
@@ -98,12 +106,12 @@ func (r *Repository) CreateExpression(
 	if err != nil {
 		return "", err
 	}
-
 	return expr.ID, nil
 }
 
-func (r *Repository) ListExpressions(_ context.Context) ([]modelv2.Expression, error) {
-	var exprs []modelv2.Expression
+// ListExpressions retrieves all stored expressions.
+func (r *Repository) ListExpressions(_ context.Context) ([]models.Expression, error) {
+	var exprs []models.Expression
 
 	err := r.db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -111,28 +119,12 @@ func (r *Repository) ListExpressions(_ context.Context) ([]modelv2.Expression, e
 
 		prefix := exprListPrefix()
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			// Get expression ID from the list
-			var exprID string
-			_ = it.Item().Value(func(val []byte) error {
-				exprID = string(val)
-				return nil
-			})
+			exprID := exprIDFromListKey(it.Item().Key())
 
-			// Fetch the actual expression data using its ID
-			item, err := txn.Get(exprKey(exprID))
-			if err != nil {
-				return err
+			var expr models.Expression
+			if err := scanVal(txn, exprKey(exprID), &expr); err != nil {
+				return fmt.Errorf("get expr: %w", err)
 			}
-
-			// Deserialize the expression
-			var expr modelv2.Expression
-			err = item.Value(func(val []byte) error {
-				return json.Unmarshal(val, &expr)
-			})
-			if err != nil {
-				return err
-			}
-
 			exprs = append(exprs, expr)
 		}
 
@@ -142,119 +134,77 @@ func (r *Repository) ListExpressions(_ context.Context) ([]modelv2.Expression, e
 	if err != nil {
 		return nil, err
 	}
-
 	return exprs, nil
 }
 
-func (r *Repository) GetExpression(_ context.Context, id string) (modelv2.Expression, error) {
-	var expr modelv2.Expression
+// GetExpression retrieves a specific expression by its ID.
+// Returns models.ErrExpressionNotFound if the expression doesn't exist.
+func (r *Repository) GetExpression(_ context.Context, id string) (models.Expression, error) {
+	var expr models.Expression
 
 	err := r.db.View(func(txn *badger.Txn) error {
-		// Construct the key for the expression
-		key := []byte("expr:" + id)
-
-		// Try to get the item from the database
-		item, err := txn.Get(key)
-		if err != nil {
+		if err := scanVal(txn, exprKey(id), &expr); err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return fmt.Errorf("expression with id %s not found", id)
+				return models.ErrExpressionNotFound
 			}
-			return err
+			return fmt.Errorf("get expr: %w", err)
 		}
-
-		// Deserialize the expression data
-		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &expr)
-		})
+		return nil
 	})
 
 	if err != nil {
-		return modelv2.Expression{}, fmt.Errorf("db view: %w", err)
+		return models.Expression{}, err
 	}
-
 	return expr, nil
 }
 
-func (r *Repository) GetPendingTask(_ context.Context) (modelv2.Task, error) {
-	var task modelv2.Task
-	var taskID string
+// GetPendingTask retrieves and claims the first available pending task.
+// Returns models.ErrNoPendingTasks if there are no pending tasks available.
+func (r *Repository) GetPendingTask(_ context.Context) (models.Task, error) {
+	var task models.Task
 
 	err := r.db.Update(func(txn *badger.Txn) error {
-		// Look for a task in the pending queue
+		// Find and retrieve first pending task from queue
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 
-		prefix := []byte("task:queue:pending:")
+		prefix := taskQueuePendingPrefix()
 		it.Seek(prefix)
 
-		// Check if we have any pending task
 		if !it.ValidForPrefix(prefix) {
-			return fmt.Errorf("no pending tasks available")
+			return models.ErrNoPendingTasks
 		}
 
-		// Get the first pending task ID
-		taskID = string(it.Item().Key())[len(prefix):]
+		taskID := taskIDFromPendingQueueKey(it.Item().Key())
 
-		// Remove from pending queue
 		if err := txn.Delete(it.Item().Key()); err != nil {
-			return fmt.Errorf("failed to remove task from pending queue: %w", err)
+			return fmt.Errorf("delete task from queue: %q", err)
 		}
 
-		// Get the task data
-		taskItem, err := txn.Get([]byte("task:" + taskID))
-		if err != nil {
-			return fmt.Errorf("task with id %s not found: %w", taskID, err)
+		if err := scanVal(txn, taskKey(taskID), &task); err != nil {
+			return fmt.Errorf("get task: %w", err)
 		}
 
-		// Deserialize the task
-		err = taskItem.Value(func(val []byte) error {
-			return json.Unmarshal(val, &task)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal task: %w", err)
+		// Update task state to in-progress
+		timeNow := time.Now().UTC()
+		task.Status = models.TaskStatusInProgress
+		task.UpdatedAt = timeNow
+		task.ExpireAt = timeNow.Add(2 * (task.OperationTime + time.Minute)) // TODO: to think
+		if err := setVal(txn, taskKey(taskID), task); err != nil {
+			return fmt.Errorf("to in-progress task: %w", err)
 		}
 
-		// Set the task status to in-progress and update timestamp
-		task.Status = modelv2.TaskStatusInProgress
-		task.UpdatedAt = time.Now().UTC()
-		task.ExpireAt = time.Now().UTC().Add(1 * time.Hour) // Set expiration time for the task
-
-		// Update the task in the store
-		updatedTaskData, err := json.Marshal(task)
-		if err != nil {
-			return fmt.Errorf("failed to marshal updated task: %w", err)
+		// Update parent expression state if this is the first task being processed
+		var expr models.Expression
+		if err := scanVal(txn, exprKey(task.ExpressionID), &expr); err != nil {
+			return fmt.Errorf("get expr: %w", err)
 		}
 
-		if err := txn.Set([]byte("task:"+taskID), updatedTaskData); err != nil {
-			return fmt.Errorf("failed to update task status: %w", err)
-		}
-
-		// Update expression status to in-progress if it was pending
-		exprKey := []byte("expr:" + task.ExpressionID)
-		exprItem, err := txn.Get(exprKey)
-		if err != nil {
-			return fmt.Errorf("failed to get expression: %w", err)
-		}
-
-		var expr modelv2.Expression
-		err = exprItem.Value(func(val []byte) error {
-			return json.Unmarshal(val, &expr)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal expression: %w", err)
-		}
-
-		if expr.Status == modelv2.ExpressionStatusPending {
-			expr.Status = modelv2.ExpressionStatusInProgress
-			expr.UpdatedAt = time.Now().UTC()
-
-			exprData, err := json.Marshal(expr)
-			if err != nil {
-				return fmt.Errorf("failed to marshal updated expression: %w", err)
-			}
-
-			if err := txn.Set(exprKey, exprData); err != nil {
-				return fmt.Errorf("failed to update expression status: %w", err)
+		if expr.Status == models.ExpressionStatusPending {
+			expr.Status = models.ExpressionStatusInProgress
+			expr.UpdatedAt = timeNow
+			if err := setVal(txn, exprKey(expr.ID), expr); err != nil {
+				return fmt.Errorf("to in-progress expr: %w", err)
 			}
 		}
 
@@ -262,442 +212,90 @@ func (r *Repository) GetPendingTask(_ context.Context) (modelv2.Task, error) {
 	})
 
 	if err != nil {
-		return modelv2.Task{}, err
+		return models.Task{}, err
 	}
-
 	return task, nil
 }
 
-func (r *Repository) FinishTask(_ context.Context, cmd modelv2.UpdateTaskCmd) error {
+// FinishTask updates a task's status and result, and handles subsequent operations
+// like updating related tasks, enqueueing child tasks, or completing expressions.
+// Returns models.ErrTaskNotFound if the task doesn't exist.
+func (r *Repository) FinishTask(_ context.Context, cmd models.FinishTaskCmd) error {
 	return r.db.Update(func(txn *badger.Txn) error {
-		// First, retrieve the existing task
-		taskKey := []byte("task:" + cmd.ID)
-		item, err := txn.Get(taskKey)
-		if err != nil {
+		if cmd.Status != models.TaskStatusCompleted && cmd.Status != models.TaskStatusFailed {
+			return fmt.Errorf("unexpected task status: %s", cmd.Status)
+		}
+
+		// Retrieve and update the task
+		var task models.Task
+		if err := scanVal(txn, taskKey(cmd.ID), &task); err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return fmt.Errorf("task with id %s not found", cmd.ID)
+				return models.ErrTaskNotFound
 			}
-			return err
+			return fmt.Errorf("get task: %w", err)
 		}
 
-		var task modelv2.Task
-		err = item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &task)
-		})
-		if err != nil {
-			return err
-		}
-
-		// Update task fields
 		task.Status = cmd.Status
 		task.Result = cmd.Result
 		task.UpdatedAt = time.Now().UTC()
-
-		// If the task is completed, check if we need to mark it as completed in the queue
-		if cmd.Status == modelv2.TaskStatusCompleted || cmd.Status == modelv2.TaskStatusFailed {
-			// Remove from pending queue if it was there
-			pendingQueueKey := []byte("task:queue:pending:" + cmd.ID)
-			_ = txn.Delete(pendingQueueKey) // Ignore error if key doesn't exist
-
-			if cmd.Status == modelv2.TaskStatusCompleted {
-				// If this task is completed, check if any dependent tasks can now be queued
-				if err := r.queueDependentTasks(txn, task); err != nil {
-					return err
-				}
-			} else if cmd.Status == modelv2.TaskStatusFailed {
-				// If this task is failed, fail fast all expression tasks
-				if err := r.failDependentTasks(txn, task); err != nil {
-					return err
-				}
-			}
-
-			// Check if all tasks for this expression are completed
-			// and update expression status if necessary
-			if err := r.checkExpressionCompletion(txn, task.ExpressionID); err != nil {
-				return err
-			}
+		if err := setVal(txn, taskKey(task.ID), task); err != nil {
+			return fmt.Errorf("update task: %w", err)
 		}
 
-		// Save updated task
-		updatedTaskData, err := json.Marshal(task)
+		// Handle task failure - propagate failure to entire expression
+		if task.Status == models.TaskStatusFailed {
+			if err := r.failExpression(txn, task.ExpressionID); err != nil {
+				return fmt.Errorf("fail expr: %w", err)
+			}
+			return nil
+		}
+
+		// Process successfully completed task - either enqueue child or complete expression
+		isFinal, err := r.isFinalTask(txn, task)
 		if err != nil {
-			return err
+			return fmt.Errorf("is final task: %w", err)
 		}
-		return txn.Set(taskKey, updatedTaskData)
+
+		if !isFinal {
+			if err := r.enqueueChildTask(txn, task); err != nil {
+				return fmt.Errorf("enqueue child task: %w", err)
+			}
+		} else {
+			if err := r.completeExpression(txn, task.ExpressionID, task); err != nil {
+				return fmt.Errorf("complete expr: %w", err)
+			}
+		}
+
+		return nil
 	})
 }
 
-// Helper function to check if all tasks for an expression are completed
-func (r *Repository) checkExpressionCompletion(txn *badger.Txn, exprID string) error {
-	// Get the expression
-	exprKey := []byte("expr:" + exprID)
-	item, err := txn.Get(exprKey)
-	if err != nil {
-		return err
-	}
-
-	var expr modelv2.Expression
-	err = item.Value(func(val []byte) error {
-		return json.Unmarshal(val, &expr)
-	})
-	if err != nil {
-		return err
-	}
-
-	// Check if all tasks are completed
-	allCompleted := true
-	anyFailed := false
-
-	// Iterate through all tasks for this expression
-	prefix := []byte("expr:" + exprID + ":tasks:")
-	it := txn.NewIterator(badger.DefaultIteratorOptions)
-	defer it.Close()
-
-	for it.Seek(prefix); it.ValidForPrefix(prefix) && allCompleted; it.Next() {
-		taskID := string(it.Item().Key())[len(prefix):]
-		taskItem, err := txn.Get([]byte("task:" + taskID))
-		if err != nil {
-			return err
-		}
-
-		var task modelv2.Task
-		err = taskItem.Value(func(val []byte) error {
-			return json.Unmarshal(val, &task)
-		})
-		if err != nil {
-			return err
-		}
-
-		if task.Status == modelv2.TaskStatusFailed {
-			anyFailed = true
-			allCompleted = false
-			break
-		}
-
-		if task.Status != modelv2.TaskStatusCompleted {
-			allCompleted = false
-		}
-	}
-
-	// Update expression status if all tasks are completed or any failed
-	if anyFailed {
-		expr.Status = modelv2.ExpressionStatusFailed
-		expr.UpdatedAt = time.Now().UTC()
-	} else if allCompleted {
-		// Find the final task (the one with no dependent tasks)
-		var finalTask modelv2.Task
-		found := false
-
-		it.Rewind()
-		for it.Seek(prefix); it.ValidForPrefix(prefix) && !found; it.Next() {
-			taskID := string(it.Item().Key())[len(prefix):]
-			taskItem, err := txn.Get([]byte("task:" + taskID))
-			if err != nil {
-				return err
-			}
-
-			var task modelv2.Task
-			err = taskItem.Value(func(val []byte) error {
-				return json.Unmarshal(val, &task)
-			})
-			if err != nil {
-				return err
-			}
-
-			// Check if this task is the final one (not used as a parent by any other task)
-			isDependency := false
-			it2 := txn.NewIterator(badger.DefaultIteratorOptions)
-			defer it2.Close()
-
-			for it2.Seek(prefix); it2.ValidForPrefix(prefix) && !isDependency; it2.Next() {
-				var checkTask modelv2.Task
-				err = it2.Item().Value(func(val []byte) error {
-					return json.Unmarshal(val, &checkTask)
-				})
-				if err != nil {
-					return err
-				}
-
-				if checkTask.ParentTask1ID == task.ID || checkTask.ParentTask2ID == task.ID {
-					isDependency = true
-				}
-			}
-
-			if !isDependency {
-				finalTask = task
-				found = true
-			}
-		}
-
-		if found {
-			expr.Status = modelv2.ExpressionStatusCompleted
-			expr.Result = finalTask.Result
-			expr.UpdatedAt = time.Now().UTC()
-		}
-	}
-
-	// Save updated expression
-	exprData, err := json.Marshal(expr)
-	if err != nil {
-		return err
-	}
-
-	return txn.Set(exprKey, exprData)
-}
-
-// Helper function to queue dependent tasks that are now ready to execute
-func (r *Repository) queueDependentTasks(txn *badger.Txn, completedTask modelv2.Task) error {
-	// Get all tasks for this expression
-	prefix := []byte("expr:" + completedTask.ExpressionID + ":tasks:")
-	it := txn.NewIterator(badger.DefaultIteratorOptions)
-	defer it.Close()
-
-	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-		taskID := string(it.Item().Key())[len(prefix):]
-		taskItem, err := txn.Get([]byte("task:" + taskID))
-		if err != nil {
-			continue // Skip if we can't get this task
-		}
-
-		var task modelv2.Task
-		err = taskItem.Value(func(val []byte) error {
-			return json.Unmarshal(val, &task)
-		})
-		if err != nil {
-			continue // Skip if we can't unmarshal
-		}
-
-		// Check if this task depends on the completed task
-		if task.ParentTask1ID == completedTask.ID || task.ParentTask2ID == completedTask.ID {
-			// Check if all dependencies are now satisfied
-			dependenciesMet := true
-
-			if task.ParentTask1ID != "" {
-				parent1Item, err := txn.Get([]byte("task:" + task.ParentTask1ID))
-				if err != nil {
-					dependenciesMet = false
-				} else {
-					var parent1 modelv2.Task
-					err = parent1Item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &parent1)
-					})
-					if err != nil || parent1.Status != modelv2.TaskStatusCompleted {
-						dependenciesMet = false
-					}
-				}
-			}
-
-			if dependenciesMet && task.ParentTask2ID != "" {
-				parent2Item, err := txn.Get([]byte("task:" + task.ParentTask2ID))
-				if err != nil {
-					dependenciesMet = false
-				} else {
-					var parent2 modelv2.Task
-					err = parent2Item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &parent2)
-					})
-					if err != nil || parent2.Status != modelv2.TaskStatusCompleted {
-						dependenciesMet = false
-					}
-				}
-			}
-
-			// If all dependencies are satisfied, update the task's arguments with parent results
-			// and queue it for execution
-			if dependenciesMet {
-				// Set arguments from parent tasks if they exist
-				if task.ParentTask1ID != "" {
-					parent1Item, _ := txn.Get([]byte("task:" + task.ParentTask1ID))
-					var parent1 modelv2.Task
-					_ = parent1Item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &parent1)
-					})
-					task.Arg1 = parent1.Result
-				}
-
-				if task.ParentTask2ID != "" {
-					parent2Item, _ := txn.Get([]byte("task:" + task.ParentTask2ID))
-					var parent2 modelv2.Task
-					_ = parent2Item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &parent2)
-					})
-					task.Arg2 = parent2.Result
-				}
-
-				// Update the task
-				updatedTaskData, err := json.Marshal(task)
-				if err != nil {
-					continue
-				}
-				if err := txn.Set([]byte("task:"+task.ID), updatedTaskData); err != nil {
-					continue
-				}
-
-				// Add to pending queue
-				if err := txn.Set([]byte("task:queue:pending:"+task.ID), emptyVal); err != nil {
-					continue
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// TODO: If this task is failed, fail fast all expression tasks
-func (r *Repository) failDependentTasks(txn *badger.Txn, failedTask modelv2.Task) error {
-	// Get all tasks for this expression
-	prefix := []byte("expr:" + failedTask.ExpressionID + ":tasks:")
-	it := txn.NewIterator(badger.DefaultIteratorOptions)
-	defer it.Close()
-
-	// Store all tasks that depend on the failed task (directly or indirectly)
-	// using a map for quick lookups
-	failedTaskIDs := make(map[string]struct{})
-	failedTaskIDs[failedTask.ID] = struct{}{}
-
-	// Find all dependent tasks (recursively)
-	// We need multiple passes to handle multi-level dependencies
-	changed := true
-	for changed {
-		changed = false
-
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			taskID := string(it.Item().Key())[len(prefix):]
-
-			// Skip tasks that are already marked as failed
-			if _, exists := failedTaskIDs[taskID]; exists {
-				continue
-			}
-
-			taskItem, err := txn.Get([]byte("task:" + taskID))
-			if err != nil {
-				continue // Skip if we can't get this task
-			}
-
-			var task modelv2.Task
-			err = taskItem.Value(func(val []byte) error {
-				return json.Unmarshal(val, &task)
-			})
-			if err != nil {
-				continue // Skip if we can't unmarshal
-			}
-
-			// Check if this task depends on any failed task
-			_, parent1Failed := failedTaskIDs[task.ParentTask1ID]
-			_, parent2Failed := failedTaskIDs[task.ParentTask2ID]
-
-			if parent1Failed || parent2Failed {
-				failedTaskIDs[task.ID] = struct{}{}
-				changed = true
-			}
-		}
-	}
-
-	// Mark all dependent tasks as failed and remove them from the pending queue
-	for taskID := range failedTaskIDs {
-		// Skip the original failed task as it's already marked as failed
-		if taskID == failedTask.ID {
-			continue
-		}
-
-		taskItem, err := txn.Get([]byte("task:" + taskID))
-		if err != nil {
-			continue // Skip if we can't get this task
-		}
-
-		var task modelv2.Task
-		err = taskItem.Value(func(val []byte) error {
-			return json.Unmarshal(val, &task)
-		})
-		if err != nil {
-			continue
-		}
-
-		// Update task status to failed
-		task.Status = modelv2.TaskStatusFailed
-		task.UpdatedAt = time.Now().UTC()
-
-		// Remove from pending queue if it was there
-		pendingQueueKey := []byte("task:queue:pending:" + task.ID)
-		_ = txn.Delete(pendingQueueKey) // Ignore error if key doesn't exist
-
-		// Save updated task
-		updatedTaskData, err := json.Marshal(task)
-		if err != nil {
-			continue
-		}
-
-		if err := txn.Set([]byte("task:"+task.ID), updatedTaskData); err != nil {
-			continue
-		}
-	}
-
-	// Update expression status to failed
-	exprKey := []byte("expr:" + failedTask.ExpressionID)
-	exprItem, err := txn.Get(exprKey)
-	if err != nil {
-		return err
-	}
-
-	var expr modelv2.Expression
-	err = exprItem.Value(func(val []byte) error {
-		return json.Unmarshal(val, &expr)
-	})
-	if err != nil {
-		return err
-	}
-
-	expr.Status = modelv2.ExpressionStatusFailed
-	expr.Error = "Task execution failed"
-	expr.UpdatedAt = time.Now().UTC()
-
-	exprData, err := json.Marshal(expr)
-	if err != nil {
-		return err
-	}
-
-	return txn.Set(exprKey, exprData)
-}
-
-func (r *Repository) ListExpressionTasks(_ context.Context, id string) ([]modelv2.Task, error) {
-	var tasks []modelv2.Task
+// ListExpressionTasks retrieves all tasks associated with a specific expression.
+// Returns models.ErrExpressionNotFound if the expression doesn't exist.
+func (r *Repository) ListExpressionTasks(_ context.Context, id string) ([]models.Task, error) {
+	var tasks []models.Task
 
 	err := r.db.View(func(txn *badger.Txn) error {
-		// First check if the expression exists
+		// First verify expression exists
 		if _, err := txn.Get(exprKey(id)); err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return fmt.Errorf("expression with id %s not found", id)
+				return models.ErrExpressionNotFound
 			}
-			return err
+			return fmt.Errorf("get %q:%w", string(exprKey(id)), err)
 		}
 
-		// Expression exists, now get all its tasks
-		prefix := exprTasksPrefix(id)
+		// Collect all tasks for this expression
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 
+		prefix := exprTasksPrefix(id)
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			// Get task ID from the key
 			taskID := taskIDFromExprTaskKey(it.Item().Key(), id)
 
-			// Get the actual task data
-			taskItem, err := txn.Get(taskKey(taskID))
-			if err != nil {
-				// Log error but continue with other tasks
-				continue
+			var task models.Task
+			if err := scanVal(txn, taskKey(taskID), &task); err != nil {
+				return fmt.Errorf("get task: %w", err)
 			}
-
-			// Deserialize the task
-			var task modelv2.Task
-			err = taskItem.Value(func(val []byte) error {
-				return json.Unmarshal(val, &task)
-			})
-			if err != nil {
-				// Log error but continue with other tasks
-				continue
-			}
-
 			tasks = append(tasks, task)
 		}
 
@@ -705,23 +303,127 @@ func (r *Repository) ListExpressionTasks(_ context.Context, id string) ([]modelv
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("list expression tasks: %w", err)
+		return nil, err
 	}
-
 	return tasks, nil
 }
 
-//func mapTaskOperation(s string) modelv2.TaskOperation {
-//	switch s {
-//	case "+":
-//		return modelv2.TaskOperationAddition
-//	case "-":
-//		return modelv2.TaskOperationSubtraction
-//	case "*":
-//		return modelv2.TaskOperationMultiplication
-//	case "/":
-//		return modelv2.TaskOperationDivision
-//	default:
-//		return ""
-//	}
-//}
+func (r *Repository) isFinalTask(txn *badger.Txn, task models.Task) (bool, error) {
+	it := txn.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+
+	it.Seek(exprFinalTaskPrefix(task.ExpressionID))
+
+	finalTaskID := taskIDFromExprFinalTaskKey(it.Item().Key(), task.ExpressionID)
+	return task.ID == finalTaskID, nil
+}
+
+func (r *Repository) enqueueChildTask(txn *badger.Txn, completedTask models.Task) error {
+	it := txn.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+
+	// Find child task that depends on the completed task
+	it.Seek(taskChildPrefix(completedTask.ID))
+	if !it.ValidForPrefix(taskChildPrefix(completedTask.ID)) {
+		return nil // should not happen
+	}
+
+	childTaskID := taskIDFromTaskChildKey(it.Item().Key(), completedTask.ID)
+
+	var childTask models.Task
+	if err := scanVal(txn, taskKey(childTaskID), &childTask); err != nil {
+		return fmt.Errorf("get task: %w", err)
+	}
+
+	// Update child task with parent's result value
+	if childTask.ParentTask1ID == completedTask.ID {
+		childTask.Arg1 = completedTask.Result
+	} else { // childTask.ParentTask2ID == completedTask.ID
+		childTask.Arg2 = completedTask.Result
+	}
+	childTask.UpdatedAt = time.Now().UTC()
+
+	if err := setVal(txn, taskKey(childTask.ID), childTask); err != nil {
+		return fmt.Errorf("update task: %w", err)
+	}
+
+	// Check if both parents are complete and the task is ready to be queued
+	var parent1 models.Task
+	if childTask.ParentTask1ID != "" {
+		if err := scanVal(txn, taskKey(childTask.ParentTask1ID), &parent1); err != nil {
+			return fmt.Errorf("get parent 1 of task: %w", err) // 👨‍👩‍👦 😅
+		}
+	}
+	var parent2 models.Task
+	if childTask.ParentTask2ID != "" {
+		if err := scanVal(txn, taskKey(childTask.ParentTask2ID), &parent2); err != nil {
+			return fmt.Errorf("get parent 2 of task: %w", err) // 👨‍👩‍👦 😅
+		}
+	}
+
+	if (childTask.ParentTask1ID == "" || parent1.Status == models.TaskStatusCompleted) &&
+		(childTask.ParentTask2ID == "" || parent2.Status == models.TaskStatusCompleted) {
+		if err := setOnlyKey(txn, taskQueuePendingKey(childTask.ID)); err != nil {
+			return fmt.Errorf("enqueue task: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *Repository) failExpression(txn *badger.Txn, exprID string) error {
+	// Mark all unfinished tasks as failed
+	it := txn.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+
+	prefix := exprTasksPrefix(exprID)
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		taskID := taskIDFromExprTaskKey(it.Item().Key(), exprID)
+
+		var task models.Task
+		if err := scanVal(txn, taskKey(taskID), &task); err != nil {
+			return fmt.Errorf("get task: %w", err)
+		}
+
+		if task.Status == models.TaskStatusCompleted || task.Status == models.TaskStatusFailed {
+			continue
+		}
+
+		_ = txn.Delete(taskQueuePendingKey(task.ID))
+
+		task.Status = models.TaskStatusFailed
+		task.UpdatedAt = time.Now().UTC()
+		if err := setVal(txn, taskKey(task.ID), task); err != nil {
+			return fmt.Errorf("update task: %w", err)
+		}
+	}
+
+	// Mark the expression as failed
+	var expr models.Expression
+	if err := scanVal(txn, exprKey(exprID), &expr); err != nil {
+		return fmt.Errorf("get expr: %w", err)
+	}
+
+	expr.Status = models.ExpressionStatusFailed
+	expr.UpdatedAt = time.Now().UTC()
+	if err := setVal(txn, exprKey(exprID), expr); err != nil {
+		return fmt.Errorf("update expr: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) completeExpression(txn *badger.Txn, exprID string, finalTask models.Task) error {
+	var expr models.Expression
+	if err := scanVal(txn, exprKey(exprID), &expr); err != nil {
+		return fmt.Errorf("get expr: %w", err)
+	}
+
+	expr.Status = models.ExpressionStatusCompleted
+	expr.Result = finalTask.Result
+	expr.UpdatedAt = time.Now().UTC()
+	if err := setVal(txn, exprKey(expr.ID), expr); err != nil {
+		return fmt.Errorf("update expr: %w", err)
+	}
+
+	return nil
+}

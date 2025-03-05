@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	_ = godotenv.Load(".env")
+	_ = godotenv.Load(".env.agent")
 }
 
 func main() {
@@ -38,8 +38,9 @@ func run() error {
 		return fmt.Errorf("configure logging: %w", err)
 	}
 
-	slog.InfoContext(ctx, "logger is configured")
-	slog.InfoContext(ctx, "config initialized", "config", conf)
+	log := slog.Default()
+	log.InfoContext(ctx, "logger is configured")
+	log.InfoContext(ctx, "config initialized", "config", conf)
 
 	calculatorClient, cleanup, err := client.NewAgentAPI(ctx, conf)
 	if err != nil {
@@ -49,7 +50,7 @@ func run() error {
 
 	mgmtSrv := mgmtserver.New(&mgmtserver.Config{Addr: conf.MgmtAddr})
 
-	_agent := agent.New(conf, calculatorClient)
+	_agent := agent.New(conf, log, calculatorClient)
 
 	runy.Add(mgmtSrv, _agent)
 	if err := runy.Start(ctx); err != nil {

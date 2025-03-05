@@ -1,250 +1,351 @@
 # Edu Dist Calculate API
 
-This is a distributed system for calculating arithmetic expressions. The system consists of two main components:
+![Go Version](https://img.shields.io/github/go-mod/go-version/belo4ya/edu-dist-calculate-api?logo=go)
+[![GoDoc](https://godoc.org/github.com/belo4ya/edu-dist-calculate-api?status.svg)](https://pkg.go.dev/github.com/belo4ya/edu-dist-calculate-api)
+[![Go report](https://goreportcard.com/badge/github.com/belo4ya/edu-dist-calculate-api)](https://goreportcard.com/report/github.com/belo4ya/edu-dist-calculate-api)
 
-- **Orchestrator**: A central server that receives expressions, breaks them into tasks, and manages their execution
-  order.
-- **Agent**: A computing component that fetches tasks from the orchestrator, performs calculations, and returns results.
+Программирование на Go | 24. Распределенный вычислитель арифметических выражений.
+Пользователь отправляет арифметическое выражение по HTTP и получает в ответ ~~его результат~~ id задачи вычисления.
 
-> 🚧 Оно почти работает. Если возможно, зайди завтра - точно будет работать
+Сервис состоит из двух частей:
 
-## Architecture
+- Calculator - реализует API для распределенного вычисления арифметических выражений и выполняет роль оркестратора
+  задач.
+- Agent - вычислитель, который может получить от оркестратора задачу, выполнить его и вернуть серверу результат.
 
-The system uses a distributed architecture where:
+## 📚 Решения и особенности
 
-1. Users submit expressions to the orchestrator via HTTP
-2. The orchestrator parses expressions into tasks
-3. Agents request tasks from the orchestrator, compute them, and return results
-4. Users can check the status and retrieve results of their calculations
+HTTP API реализован с помощью [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
+по верх grpc (см. [api/](api)).
+Было лень возиться с json-ами 🙄, брать фреймворк по типу fiber/echo/gin тоже лень.
+Решил поразбираться с [buf.build](https://buf.build/).
 
-## Features
+Реализованно персистентное хранение состояния сервиса Calculator с
+помощью [hypermodeinc/badger](https://github.com/hypermodeinc/badger) - key-value хранилища по типу RocksDB.
+Почему не SQLite (любая SQL-)? Хотелось поупражняться в проектирование модели данных для key-value хранилищ - очень
+интересно получилось,
+[calculator/repository/repository.go](internal/calculator/repository/repository.go) - сердце проекта ✨.
 
-- Support for basic arithmetic operations: addition, subtraction, multiplication, and division
-- Support for parenthesized expressions
-- Distributed computation with configurable operation times
-- Asynchronous processing with status tracking
+Для id выражений и задач используется [xid](https://github.com/rs/xid). Благодаря упорядоченности xid
+вместе с prefix scan'ом kv-хранилища записи в API почти всегда отсортированы по дате создания (в пределах 1 сек.).
+UUID'ы и Series слишком скучно (см. [awesome identifiers](https://adileo.github.io/awesome-identifiers/)).
 
-## Getting Started
+И у Calculator и у Agent есть MGMT-сервер - это HTTP-сервер с сервисными ручками `/metrics, /debug, /healthz, /readyz`.
+Зачем? Просто так 🙄.
 
-### Prerequisites
+## 🔧 Конфигурация
 
-- Go 1.21 or higher
-- hypermodeinc/badger (fs write permissions)
+Конфигурация выполняется с помощью переменных окружения. Значения по умолчанию можно найти в
+[calculator/config/config.go](internal/calculator/config/config.go)
+и [agent/config/config.go](internal/agent/config/config.go).
 
-### Running the Application
+Необходимые значения также можно задать с помощью файлов .env-файлов `.env.calculator` и `.env.agent`
+(см. примеры [.env.calculator.example](.env.calculator.example) и [.env.agent.example](.env.agent.example))
 
-#### Start the Orchestrator
+### Calculator
 
-```bash
-go run cmd/orchestrator/main.go
+- `LOG_LEVEL`: Уровень логирования (по умолчанию: `info`)
+- `MGMT_ADDR`: Адрес сервера управления (по умолчанию: `:8081`)
+- `GRPC_ADDR`: Адрес GRPC сервера (по умолчанию: `:50051`)
+- `HTTP_ADDR`: Адрес HTTP сервера (по умолчанию: `:8080`)
+- `DB_BADGER_PATH`: Путь к хранилищу базы данных Badger (по умолчанию: `.data/badger`)
+- `TIME_ADDITION_MS`: Время в миллисекундах для операций сложения (по умолчанию: `1000`)
+- `TIME_SUBTRACTION_MS`: Время в миллисекундах для операций вычитания (по умолчанию: `1000`)
+- `TIME_MULTIPLICATION_MS`: Время в миллисекундах для операций умножения (по умолчанию: `1000`)
+- `TIME_DIVISION_MS`: Время в миллисекундах для операций деления (по умолчанию: `1000`)
+
+### Agent
+
+- `LOG_LEVEL`: Уровень логирования (по умолчанию: `info`)
+- `MGMT_ADDR`: Адрес сервера управления (по умолчанию: `:8082`)
+- `CALCULATOR_API_ADDR`: Адрес сервиса Calculator API (по умолчанию: `localhost:50051`)
+- `COMPUTING_POWER`: Количество одновременных вычислительных задач (по умолчанию: `4`)
+
+## 🚀 Запуск
+
+Запустить все компоненты сервиса:
+
+```shell
+make compose-up
 ```
 
-#### Start the Agent
+Запуск рутины:
 
-```bash
-go run cmd/agent/main.go
+```shell
+go mod tidy && make generate lint test-cov
 ```
 
-You can start multiple agent instances to increase processing power.
+## 💡 Использование
 
-### Environment Variables
+Сервис предоставляет HTTP и GRPC API. По умолчанию HTTP API доступно по
+адресу [http://localhost:8080](http://localhost:8080), а GRPC - [http://localhost:50051](http://localhost:50051).
 
-#### Orchestrator
+Спецификацию API можно найти в [api/calculator/v1](api/calculator/v1)
+или [api/api.swagger.json](api/api.swagger.json).
 
-- `TIME_ADDITION_MS`: Time to process addition operations (default: 100ms)
-- `TIME_SUBTRACTION_MS`: Time to process subtraction operations (default: 100ms)
-- `TIME_MULTIPLICATION_MS`: Time to process multiplication operations (default: 100ms)
-- `TIME_DIVISION_MS`: Time to process division operations (default: 100ms)
+Вместо UI интерактивно поработать с HTTP API сервиса можно с помощью SwaggerUI, доступного по
+адресу [localhost:8080/docs/](http://localhost:8080/docs/).
 
-#### Agent
+<img src="docs/assets/swagger-ui.png" alt="" width="600">
 
-- `COMPUTING_POWER`: Number of goroutines for parallel processing (default: 1)
+### Примеры curl
 
-## API Reference
+#### Public API
 
-### Public API
+Отправка арифметического выражения на вычисление:
 
-#### Add Expression for Calculation
-
-```bash
-curl --location 'localhost:8080/api/v1/calculate' \
---header 'Content-Type: application/json' \
---data '{
-    "expression": "2+2*2"
+```shell
+curl -X 'POST' \
+  'http://localhost:8080/api/v1/calculate' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "expression": "2 + 2 * 2"
 }'
 ```
 
-Response:
+Ответ с кодом 201:
 
 ```json
 {
-  "id": "cv4l4a3j3vq15tlsces0"
+  "id": "cv5t4a3j3vq37o313p5g"
 }
 ```
 
-#### List Expressions
+Отправка некорректного выражения:
 
-```bash
-curl --location 'localhost:8080/api/v1/expressions'
+```shell
+curl -X 'POST' \
+  'http://localhost:8080/api/v1/calculate' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "expression": "1+"
+}'
 ```
 
-Response:
+Ответ с кодом 422:
+
+```json
+{
+  "code": 3,
+  "message": "invalid expression",
+  "details": []
+}
+```
+
+Получение информации о конкретном выражении по его идентификатору:
+
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/api/v1/expressions/cv5t97rj3vq3pl6kh1u0' \
+  -H 'accept: application/json'
+```
+
+Ответ с кодом 200:
+
+```json
+{
+  "expression": {
+    "id": "cv5t97rj3vq3pl6kh1u0",
+    "expression": "2 + 2 * 2",
+    "status": "EXPRESSION_STATUS_PENDING",
+    "result": 0
+  }
+}
+```
+
+Запрос несуществующего выражения:
+
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/api/v1/expressions/notexists' \
+  -H 'accept: application/json'
+```
+
+Ответ с кодом 404:
+
+```json
+{
+  "code": 5,
+  "message": "expression not found",
+  "details": []
+}
+```
+
+Получение списка всех отправленных выражений:
+
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/api/v1/expressions' \
+  -H 'accept: application/json'
+```
+
+Ответ с кодом 200:
 
 ```json
 {
   "expressions": [
     {
-      "id": "cv4l4a3j3vq15tlsces0",
+      "id": "cv5rfcrj3vqdpq0e15b0",
+      "expression": "2 + 2*2 + (9+3+1) / 4",
       "status": "EXPRESSION_STATUS_COMPLETED",
-      "result": 6
+      "result": 9.25
+    },
+    {
+      "id": "cv5rh8bj3vqe0iomlp4g",
+      "expression": "((2+2) + (2+2) + (2+2) + (2+2)) / 0",
+      "status": "EXPRESSION_STATUS_FAILED",
+      "result": 0
+    },
+    {
+      "id": "cv5t97rj3vq3pl6kh1u0",
+      "expression": "2 + 2 * 2",
+      "status": "EXPRESSION_STATUS_PENDING",
+      "result": 0
     }
   ]
 }
 ```
 
-#### Get Expression by ID
+#### Agent API
 
-```bash
-curl --location 'localhost:8080/api/v1/expressions/cv4l4a3j3vq15tlsces0'
+Запрос вычислительной задачи от Calculator:
+
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/internal/task' \
+  -H 'accept: application/json'
 ```
 
-Response:
-
-```json
-{
-  "expression": {
-    "id": "cv4l4a3j3vq15tlsces0",
-    "status": "EXPRESSION_STATUS_COMPLETED",
-    "result": 6
-  }
-}
-```
-
-### Internal API (Agent-Orchestrator Communication)
-
-#### Get Task for Execution
-
-```bash
-curl --location 'localhost:8080/internal/task'
-```
-
-Response:
+Ответ с кодом 200:
 
 ```json
 {
   "task": {
-    "id": "task-123",
-    "arg1": 2,
-    "arg2": 2,
-    "operation": "TASK_OPERATION_MULTIPLICATION",
-    "operation_time": {
-      "seconds": 0,
-      "nanos": 100000000
-    }
+    "id": "cv5rjgjj3vqe6l04c50g",
+    "arg1": 1,
+    "arg2": 3,
+    "operation": "TASK_OPERATION_ADDITION",
+    "operationTime": "10s"
   }
 }
 ```
 
-#### Submit Task Result
+Запрос задачи, когда доступных задач нет:
 
-```bash
-curl --location 'localhost:8080/internal/task' \
---header 'Content-Type: application/json' \
---data '{
-    "id": "task-123",
-    "result": 4
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/internal/task' \
+  -H 'accept: application/json'
+```
+
+Ответ с кодом 404:
+
+```json
+{
+  "code": 5,
+  "message": "no pending tasks",
+  "details": []
+}
+```
+
+Отправка результата задачи обратно в Calculator:
+
+```shell
+curl -X 'POST' \
+  'http://localhost:8080/internal/task' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "id": "cv5rjgjj3vqe6l04c50g",
+  "result": 4
 }'
 ```
 
-## Project Structure
+Ответ с кодом 200:
 
-```
-/
-├── api/                     # Protocol buffer definitions
-│   └── calculator/
-│       └── v1/             
-│           ├── calculator_public.proto   # Public API definitions
-│           └── calculator_agent.proto    # Agent-Orchestrator API definitions
-├── cmd/                     # Application entry points
-│   ├── agent/               
-│   │   └── main.go          # Agent main file
-│   └── orchestrator/       
-│       └── main.go          # Orchestrator main file
-├── internal/                # Internal packages
-│   ├── agent/              
-│   │   └── ...              # Agent implementation
-│   ├── calculator/          
-│   │   ├── parser/          # Expression parsing
-│   │   ├── repository/      # Data storage
-│   │   └── service/         # Business logic
-│   └── orchestrator/       
-│       └── ...              # Orchestrator implementation
-├── pkg/                     # Shared packages
-│   └── ...
-├── go.mod                   # Go module definition
-└── README.md                # This file
+```json
+{}
 ```
 
-## Testing
+Отправка результата для несуществующей задачи:
 
-Run all tests with:
-
-```bash
-go test ./...
+```shell
+curl -X 'POST' \
+  'http://localhost:8080/internal/task' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "id": "notexists",
+  "result": 4
+}'
 ```
 
-## Examples
+Ответ с кодом 404:
 
-### Example 1: Simple Addition
-
-```bash
-# Submit expression
-curl --location 'localhost:8080/api/v1/calculate' \
---header 'Content-Type: application/json' \
---data '{"expression": "2+3"}'
-
-# Response
-{"id":"abc123"}
-
-# Check status (immediately after submission)
-curl --location 'localhost:8080/api/v1/expressions/abc123'
-
-# Response
-{"expression":{"id":"abc123","status":"EXPRESSION_STATUS_PENDING"}}
-
-# Check status (after processing)
-curl --location 'localhost:8080/api/v1/expressions/abc123'
-
-# Response
-{"expression":{"id":"abc123","status":"EXPRESSION_STATUS_COMPLETED","result":5}}
+```json
+{
+  "code": 5,
+  "message": "task not found",
+  "details": []
+}
 ```
 
-### Example 2: Complex Expression
+#### Another internal API
 
-```bash
-# Submit expression
-curl --location 'localhost:8080/api/v1/calculate' \
---header 'Content-Type: application/json' \
---data '{"expression": "2*(3+4)/2"}'
+Получение всех задач для конкретного выражения (полезно для отладки):
 
-# Response
-{"id":"cv4l4a3j3vq15tlsces0"}
-
-# Check status (after processing)
-curl --location 'localhost:8080/api/v1/expressions/cv4l4a3j3vq15tlsces0'
-
-# Response
-{"expression":{"id":"def456","status":"EXPRESSION_STATUS_COMPLETED","result":7}}
+```shell
+curl -X 'GET' \
+  'http://localhost:8080/internal/v2/expressions/cv5rfcrj3vqdpq0e15b0/tasks' \
+  -H 'accept: application/json'
 ```
 
-### Example 3: Invalid Expression
+Ответ с кодом 200:
 
-```bash
-# Submit invalid expression
-curl --location 'localhost:8080/api/v1/calculate' \
---header 'Content-Type: application/json' \
---data '{"expression": "2+"}'
-
-# Response
-{"error":"Expression is not valid"}
+```json
+{
+  "tasks": [
+    {
+      "id": "cv5te3jj3vq46au1kjeg",
+      "expressionId": "cv5te3jj3vq46au1kjfg",
+      "parentTask1Id": "",
+      "parentTask2Id": "",
+      "arg1": 2,
+      "arg2": 2,
+      "operation": "TASK_OPERATION_MULTIPLICATION",
+      "operationTime": "1s",
+      "status": "TASK_STATUS_PENDING",
+      "result": 0,
+      "expireAt": "0001-01-01T00:00:00Z",
+      "createdAt": "2025-03-08T05:35:10.982839Z",
+      "updatedAt": "2025-03-08T05:35:10.982839Z"
+    },
+    {
+      "id": "cv5te3jj3vq46au1kjf0",
+      "expressionId": "cv5te3jj3vq46au1kjfg",
+      "parentTask1Id": "",
+      "parentTask2Id": "cv5te3jj3vq46au1kjeg",
+      "arg1": 2,
+      "arg2": 0,
+      "operation": "TASK_OPERATION_ADDITION",
+      "operationTime": "1s",
+      "status": "TASK_STATUS_PENDING",
+      "result": 0,
+      "expireAt": "0001-01-01T00:00:00Z",
+      "createdAt": "2025-03-08T05:35:10.982839Z",
+      "updatedAt": "2025-03-08T05:35:10.982839Z"
+    }
+  ]
+}
 ```
+
+---
+
+> Крайний срок, или дедлайн (от англ. deadline — мёртвая линия) — дата выполнения задачи или работы, определённый момент
+> времени, к которому должна быть достигнута цель или задача. По истечении этого времени элемент можно считать
+> просроченным (например, для рабочих проектов или школьных заданий). Если рабочие задания или проекты не завершены к
+> установленному сроку, это может отрицательно повлиять на рейтинг производительности сотрудника или оценку учащегося.
+
+🙏 Просьба не смотреть ничего, кроме актуального main.

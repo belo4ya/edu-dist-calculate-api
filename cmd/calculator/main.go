@@ -15,13 +15,14 @@ import (
 	"github.com/belo4ya/edu-dist-calculate-api/internal/mgmtserver"
 	"github.com/belo4ya/runy"
 	"github.com/dgraph-io/badger/v4"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
-	_ = godotenv.Load(".env")
+	_ = godotenv.Load(".env.calculator")
 }
 
 func main() {
@@ -43,16 +44,15 @@ func run() error {
 		return fmt.Errorf("configure logging: %w", err)
 	}
 
-	slog.InfoContext(ctx, "logger is configured")
-	slog.InfoContext(ctx, "config initialized", "config", conf)
+	log := slog.Default()
+	log.InfoContext(ctx, "logger is configured")
+	log.InfoContext(ctx, "config initialized", "config", conf)
 
 	mgmtSrv := mgmtserver.New(&mgmtserver.Config{Addr: conf.MgmtAddr})
 	grpcSrv := server.NewGRPCServer(conf)
 	httpSrv := server.NewHTTPServer(conf)
 
-	clientOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger1"))
+	db, err := badger.Open(badger.DefaultOptions(conf.DBBadgerPath))
 	if err != nil {
 		return fmt.Errorf("open badger: %w", err)
 	}
@@ -62,16 +62,20 @@ func run() error {
 
 	repo := repository.New(db)
 
-	calcSvc := service.NewCalculatorService(conf, calc.NewCalculator(), repo)
-	calcSvc.Register(grpcSrv.GRPC)
-	if err := calcSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
-		return fmt.Errorf("calculator service: register grpc gateway: %w", err)
-	}
+	calcSvc := service.NewCalculatorService(conf, log, calc.NewCalculator(), repo)
+	agentSvc := service.NewAgentService(conf, log, repo)
+	internalSvc := service.NewInternalService(conf, log, repo)
 
-	agentSvc := service.NewAgentService(conf, repo)
-	agentSvc.Register(grpcSrv.GRPC)
-	if err := agentSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
-		return fmt.Errorf("agent service: register grpc gateway: %w", err)
+	for i, svc := range []interface {
+		Register(*grpc.Server)
+		RegisterGRPCGateway(context.Context, *runtime.ServeMux, []grpc.DialOption) error
+	}{calcSvc, agentSvc, internalSvc} {
+		svc.Register(grpcSrv.GRPC)
+		if err := svc.RegisterGRPCGateway(ctx, httpSrv.GWMux, []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		}); err != nil {
+			return fmt.Errorf("register grpc gateway %d: %w", i, err)
+		}
 	}
 
 	runy.Add(mgmtSrv, grpcSrv, httpSrv)

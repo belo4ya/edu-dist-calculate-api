@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package calculator.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1;v1";
+
+// Handles calculation of arithmetic expressions.
+service CalculatorService {
+  // Submits a new arithmetic expression for calculation.
+  rpc Calculate(CalculateRequest) returns (CalculateResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/calculate"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      responses: {
+        key: "201"
+        value: {
+          description: "Expression accepted for calculation"
+          schema: {
+            json_schema: {ref: ".calculator.v1.CalculateResponse"}
+          }
+        }
+      }
+    };
+  }
+
+  // Returns all expressions.
+  rpc ListExpressions(google.protobuf.Empty) returns (ListExpressionsResponse) {
+    option (google.api.http) = {get: "/api/v1/expressions"};
+  }
+
+  // Returns a specific expression by its identifier.
+  rpc GetExpression(GetExpressionRequest) returns (GetExpressionResponse) {
+    option (google.api.http) = {get: "/api/v1/expressions/{id}"};
+  }
+}
+
+// Represents the current state of an expression calculation.
+enum ExpressionStatus {
+  // Status not specified.
+  EXPRESSION_STATUS_UNSPECIFIED = 0;
+  // Expression is waiting to be calculated.
+  EXPRESSION_STATUS_PENDING = 1;
+  // Expression is currently being calculated.
+  EXPRESSION_STATUS_IN_PROGRESS = 2;
+  // Expression calculation was successful.
+  EXPRESSION_STATUS_COMPLETED = 3;
+  // Expression calculation failed.
+  EXPRESSION_STATUS_FAILED = 4;
+}
+
+// Request for submitting a new expression.
+message CalculateRequest {
+  // Arithmetic expression to calculate.
+  string expression = 1;
+}
+
+// Response after expression submission.
+message CalculateResponse {
+  // Unique identifier of the submitted expression.
+  string id = 1;
+}
+
+// Information about an arithmetic expression.
+message Expression {
+  // Unique identifier of the expression.
+  string id = 1;
+  // Original arithmetic expression string.
+  string expression = 2;
+  // Current calculation status.
+  ExpressionStatus status = 3;
+  // Calculation result (if completed).
+  double result = 4;
+}
+
+// Contains a list of all expressions.
+message ListExpressionsResponse {
+  // List of expressions.
+  repeated Expression expressions = 1;
+}
+
+// Request to fetch a specific expression.
+message GetExpressionRequest {
+  // Identifier of the expression to retrieve.
+  string id = 1;
+}
+
+// Response containing a specific expression.
+message GetExpressionResponse {
+  // The requested expression.
+  Expression expression = 1;
+}

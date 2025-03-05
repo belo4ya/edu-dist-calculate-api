@@ -1,8 +1,11 @@
-quiet: False
+quiet: True
 with-expecter: True
 outpkg: mocks
 dir: "internal/testutil/mocks/{{.PackageName}}"
-#packages:
-#  git.sbercloud.tech/products/aicloud/go/core/mlspace-monaas-enricher/internal/service:
-#    config:
-#      all: True
+packages:
+  github.com/belo4ya/edu-dist-calculate-api/internal/agent:
+    config:
+      all: True
+  github.com/belo4ya/edu-dist-calculate-api/internal/calculator/service:
+    config:
+      all: True

@@ -1,6 +1,15 @@
-package modelv2
+package models
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrExpressionNotFound = errors.New("expression not found")
+	ErrTaskNotFound       = errors.New("task not found")
+	ErrNoPendingTasks     = errors.New("no pending tasks")
+)
 
 type Expression struct {
 	ID         string           `json:"id"`
@@ -28,12 +37,13 @@ type Task struct {
 	ParentTask1ID string `json:"parent_task_1_id"`
 	ParentTask2ID string `json:"parent_task_2_id"`
 
-	Arg1      float64       `json:"arg_1"`
-	Arg2      float64       `json:"arg_2"`
-	Operation TaskOperation `json:"operation"`
-	Status    TaskStatus    `json:"status"`
-	Result    float64       `json:"result"`
-	ExpireAt  time.Time     `json:"expire_at"`
+	Arg1          float64       `json:"arg_1"`
+	Arg2          float64       `json:"arg_2"`
+	Operation     TaskOperation `json:"operation"`
+	OperationTime time.Duration `json:"operation_time"`
+	Status        TaskStatus    `json:"status"`
+	Result        float64       `json:"result"`
+	ExpireAt      time.Time     `json:"expire_at"` // TODO: to think
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

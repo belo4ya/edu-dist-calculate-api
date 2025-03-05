@@ -2,14 +2,17 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"sync"
 	"time"
 
+	"github.com/avast/retry-go/v4"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/client"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/agent/config"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/logging"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 )
 
 type CalculatorAgentAPIClient interface {
@@ -17,20 +20,25 @@ type CalculatorAgentAPIClient interface {
 	SubmitTaskResult(ctx context.Context, res *calculatorv1.SubmitTaskResultRequest) error
 }
 
+// Agent is a worker that fetches and processes calculator tasks from a remote API.
+// It implements a worker pool pattern to handle multiple tasks concurrently.
 type Agent struct {
 	conf   *config.Config
-	client CalculatorAgentAPIClient
 	log    *slog.Logger
+	client CalculatorAgentAPIClient
 }
 
-func New(conf *config.Config, c CalculatorAgentAPIClient) *Agent {
+// New creates a new Agent with the provided configuration, logger, and API client.
+func New(conf *config.Config, log *slog.Logger, c CalculatorAgentAPIClient) *Agent {
 	return &Agent{
 		conf:   conf,
+		log:    logging.WithName(log, "agent"),
 		client: c,
-		log:    slog.With("logger", "agent"),
 	}
 }
 
+// Start launches the agent's worker pool based on configured computing power.
+// It blocks until the context is canceled.
 func (a *Agent) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -48,6 +56,8 @@ func (a *Agent) Start(ctx context.Context) error {
 	return nil
 }
 
+// worker runs a continuous loop that fetches, executes, and submits results for calculator tasks.
+// It will keep running until the context is canceled.
 func (a *Agent) worker(ctx context.Context, workerID int) {
 	log := a.log.With("worker_id", workerID)
 	log.InfoContext(ctx, "worker started")
@@ -60,16 +70,19 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 		default:
 			task, err := a.fetchTask(ctx, log)
 			if err != nil {
-				continue
+				continue // context done
 			}
 
-			log = log.With("task_id", task.Id)
+			log := log.With("task_id", task.Id)
 			log.DebugContext(ctx, "executing task")
 
-			result := a.executeTask(task)
+			result, err := a.executeTask(ctx, task)
+			if err != nil {
+				continue // context done
+			}
 
 			if err := a.submitTaskResult(ctx, log, task.Id, result); err != nil {
-				continue
+				continue // context done
 			}
 
 			log.DebugContext(ctx, "task completed", "result", result)
@@ -77,77 +90,74 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 	}
 }
 
-func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
-	time.Sleep(task.OperationTime.AsDuration())
+// executeTask performs the actual mathematical operation specified by the task.
+// It simulates computation time by waiting for the duration specified in the task.
+func (a *Agent) executeTask(ctx context.Context, task *calculatorv1.Task) (float64, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-time.After(task.OperationTime.AsDuration()):
+	}
 
 	switch task.Operation {
 	case calculatorv1.TaskOperation_TASK_OPERATION_ADDITION:
-		return task.Arg1 + task.Arg2
+		return task.Arg1 + task.Arg2, nil
 	case calculatorv1.TaskOperation_TASK_OPERATION_SUBTRACTION:
-		return task.Arg1 - task.Arg2
+		return task.Arg1 - task.Arg2, nil
 	case calculatorv1.TaskOperation_TASK_OPERATION_MULTIPLICATION:
-		return task.Arg1 * task.Arg2
+		return task.Arg1 * task.Arg2, nil
 	case calculatorv1.TaskOperation_TASK_OPERATION_DIVISION:
 		if task.Arg2 == 0 {
-			return math.NaN()
+			return math.NaN(), nil
 		}
-		return task.Arg1 / task.Arg2
+		return task.Arg1 / task.Arg2, nil
 	default:
-		return math.NaN()
+		return math.NaN(), nil
 	}
 }
 
+// fetchTask retrieves a pending task from the remote API with exponential backoff.
+// It will retry indefinitely until the context is canceled or a task is obtained.
 func (a *Agent) fetchTask(ctx context.Context, log *slog.Logger) (*calculatorv1.Task, error) {
-	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
-
-	for attempt := 1; ; attempt++ {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			task, err := a.client.GetTask(ctx)
-			if err != nil {
+	task, _ := retry.DoWithData(
+		func() (*calculatorv1.Task, error) {
+			return a.client.GetTask(ctx)
+		},
+		retry.OnRetry(func(attempt uint, err error) {
+			if errors.Is(err, client.ErrNoTasks) {
+				log.DebugContext(ctx, "no tasks")
+			} else {
 				log.ErrorContext(ctx, "failed to fetch task", "error", err, "attempt", attempt)
-				time.Sleep(backoff(attempt))
-				continue
 			}
-			if task == nil {
-				log.DebugContext(ctx, "no tasks available")
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			return task, nil
-		}
-	}
+		}),
+		retry.Context(ctx),
+		retry.UntilSucceeded(),
+		retry.Delay(200*time.Millisecond),
+		retry.MaxDelay(10*time.Second),
+		retry.MaxJitter(1*time.Second),
+	)
+	return task, ctx.Err()
 }
 
+// submitTaskResult sends the computed result back to the API with exponential backoff.
+// It will retry indefinitely until the context is canceled or the submission succeeds.
 func (a *Agent) submitTaskResult(ctx context.Context, log *slog.Logger, taskID string, result float64) error {
-	backoff := backoffExponentialWithJitter(100*time.Millisecond, 5*time.Second, 0.2)
-
 	req := &calculatorv1.SubmitTaskResultRequest{
 		Id:     taskID,
 		Result: result,
 	}
-
-	for attempt := 1; ; attempt++ {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			if err := a.client.SubmitTaskResult(ctx, req); err != nil {
-				log.ErrorContext(ctx, "failed to submit result", "error", err, "attempt", attempt)
-				time.Sleep(backoff(attempt))
-				continue
-			}
-			return nil
-		}
-	}
-}
-
-func backoffExponentialWithJitter(dur time.Duration, cap time.Duration, jitter float64) func(int) time.Duration {
-	f := retry.BackoffExponentialWithJitter(dur, jitter)
-	return func(attempt int) time.Duration {
-		return min(f(context.Background(), uint(attempt)), cap)
-	}
+	_ = retry.Do(
+		func() error {
+			return a.client.SubmitTaskResult(ctx, req)
+		},
+		retry.OnRetry(func(attempt uint, err error) {
+			log.ErrorContext(ctx, "failed to submit task result", "error", err, "attempt", attempt)
+		}),
+		retry.Context(ctx),
+		retry.UntilSucceeded(),
+		retry.Delay(200*time.Millisecond),
+		retry.MaxDelay(10*time.Second),
+		retry.MaxJitter(1*time.Second),
+	)
+	return ctx.Err()
 }

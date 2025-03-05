@@ -21,3 +21,7 @@ func Configure(conf *Config) error {
 	slog.SetDefault(log)
 	return nil
 }
+
+func WithName(log *slog.Logger, name string) *slog.Logger {
+	return log.With("logger", name)
+}

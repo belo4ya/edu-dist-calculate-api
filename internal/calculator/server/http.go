@@ -6,27 +6,36 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/belo4ya/edu-dist-calculate-api/api"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	httpSwagger "github.com/swaggo/http-swagger"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 type HTTPServer struct {
-	HTTP *http.Server
-	Mux  *runtime.ServeMux
-	conf *config.Config
+	HTTP  *http.Server
+	GWMux *runtime.ServeMux
+	conf  *config.Config
 }
 
 func NewHTTPServer(conf *config.Config) *HTTPServer {
-	mux := runtime.NewServeMux()
+	mux := http.NewServeMux()
+	gwmux := runtime.NewServeMux(runtime.WithForwardResponseOption(httpResponseModifier))
+	mux.Handle("/", gwmux)
+	handleDocs(mux)
 	return &HTTPServer{
 		HTTP: &http.Server{
 			Addr:    conf.HTTPAddr,
 			Handler: mux,
 		},
-		Mux:  mux,
-		conf: conf,
+		GWMux: gwmux,
+		conf:  conf,
 	}
 }
 
@@ -51,4 +60,37 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 	case err := <-errCh:
 		return err
 	}
+}
+
+const MetadataHeaderHTTPCode = "x-http-code"
+
+func WithHTTPResponseCode(ctx context.Context, code int) {
+	_ = grpc.SetHeader(ctx, metadata.Pairs(MetadataHeaderHTTPCode, strconv.Itoa(code)))
+}
+
+func httpResponseModifier(ctx context.Context, w http.ResponseWriter, _ proto.Message) error {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return nil
+	}
+
+	if vals := md.HeaderMD.Get(MetadataHeaderHTTPCode); len(vals) > 0 {
+		code, err := strconv.Atoi(vals[0])
+		if err != nil {
+			return err
+		}
+		delete(md.HeaderMD, MetadataHeaderHTTPCode)
+		delete(w.Header(), "Grpc-Metadata-X-Http-Code")
+		w.WriteHeader(code)
+	}
+
+	return nil
+}
+
+func handleDocs(mux *http.ServeMux) {
+	mux.HandleFunc("/docs/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(api.OpenAPISpec)
+	})
+	mux.Handle("/docs/", httpSwagger.Handler(httpSwagger.URL("/docs/openapi.json")))
 }

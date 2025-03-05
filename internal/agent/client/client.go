@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var ErrNoTasks = fmt.Errorf("no tasks")
+
 type AgentAPI struct {
 	client calculatorv1.AgentServiceClient
 }
@@ -56,7 +58,7 @@ func (c *AgentAPI) GetTask(ctx context.Context) (*calculatorv1.Task, error) {
 	if err != nil {
 		grpcStatus := status.Convert(err)
 		if grpcStatus.Code() == codes.NotFound {
-			return nil, nil
+			return nil, ErrNoTasks
 		}
 		return nil, fmt.Errorf("get task: %w", err)
 	}

@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package calculator.v1;
+
+import "calculator/v1/agent.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1;v1";
+
+// Service for internal management of expression tasks.
+service InternalService {
+  // Returns all tasks for a specific expression.
+  rpc ListExpressionTasks(ListExpressionTasksRequest) returns (ListExpressionTasksResponse) {
+    option (google.api.http) = {get: "/internal/v2/expressions/{id}/tasks"};
+  }
+}
+
+// Represents the processing state of a calculation task.
+enum TaskStatus {
+  // Status not specified.
+  TASK_STATUS_UNSPECIFIED = 0;
+  // Task is waiting to be processed.
+  TASK_STATUS_PENDING = 1;
+  // Task is currently being processed.
+  TASK_STATUS_IN_PROGRESS = 2;
+  // Task processing was successful.
+  TASK_STATUS_COMPLETED = 3;
+  // Task processing failed.
+  TASK_STATUS_FAILED = 4;
+}
+
+// Request to retrieve tasks for a specific expression.
+message ListExpressionTasksRequest {
+  // Identifier of the expression.
+  string id = 1;
+}
+
+// Contains a list of tasks for an expression.
+message ListExpressionTasksResponse {
+  // Detailed information about a calculation task.
+  message Task {
+    // Unique identifier of the task.
+    string id = 1;
+    // Identifier of the parent expression.
+    string expression_id = 2;
+    // Identifier of the first parent task.
+    string parent_task_1_id = 3;
+    // Identifier of the second parent task.
+    string parent_task_2_id = 4;
+    // First operand value.
+    double arg_1 = 5;
+    // Second operand value.
+    double arg_2 = 6;
+    // Mathematical operation to perform.
+    calculator.v1.TaskOperation operation = 7;
+    // Expected duration for task processing.
+    google.protobuf.Duration operation_time = 8;
+    // Current processing status.
+    TaskStatus status = 9;
+    // Calculation result.
+    double result = 10;
+    // Time when the task expires.
+    google.protobuf.Timestamp expire_at = 11;
+    // Time when the task was created.
+    google.protobuf.Timestamp created_at = 12;
+    // Time when the task was last updated.
+    google.protobuf.Timestamp updated_at = 13;
+  }
+  // List of tasks.
+  repeated Task tasks = 1;
+}
