@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/calc"
@@ -18,8 +19,17 @@ func (r *Repo) InsertTask(task *model.Task) (int, error) {
 func main() {
 	repo := &Repo{}
 
-	err := calc.Calc("2 + 2 * 2 + 1", 1, repo)
+	s := "2 + 2 * 2 + (9 + 3)"
+
+	err := calc.Calc(s, 1, repo)
 	if err != nil {
 		slog.Error("error", "error", err)
 	}
+
+	c := &calc.Calculator{}
+	rpn, err := c.Parse(s)
+	if err != nil {
+		slog.Error("error", "error", err)
+	}
+	fmt.Printf("%+v\n", rpn)
 }

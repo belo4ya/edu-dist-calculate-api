@@ -18,6 +18,8 @@ func Calc(stringExpression string, id int, repo Repository) error {
 		return err
 	}
 
+	fmt.Printf("tokenize: %+v\n", expression)
+
 	if len(expression) == 0 {
 		return model.ErrorEmptyExpression
 	}
@@ -27,12 +29,9 @@ func Calc(stringExpression string, id int, repo Repository) error {
 		return err
 	}
 
-	err = parseRPN(reversePolishNotation, id, repo)
-	if err != nil {
-		return err
-	}
-
+	fmt.Printf("reversePolishNotation: %+v\n", reversePolishNotation)
 	return nil
+
 }
 
 // NewTask создает экземпляр структуры Task
