@@ -11,7 +11,7 @@ type CreateExpressionTaskCmd struct {
 
 	Arg1      float64
 	Arg2      float64
-	Operation string
+	Operation TaskOperation
 }
 
 type UpdateTaskCmd struct {

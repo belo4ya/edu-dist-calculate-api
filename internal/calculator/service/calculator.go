@@ -73,7 +73,7 @@ func (s *CalculatorService) Calculate(ctx context.Context, req *calculatorv1.Cal
 			ParentTask2ID: t.ParentTask2ID,
 			Arg1:          t.Arg1,
 			Arg2:          t.Arg2,
-			Operation:     t.Operation,
+			Operation:     modelv2.TaskOperation(t.Operation),
 		})
 	}
 

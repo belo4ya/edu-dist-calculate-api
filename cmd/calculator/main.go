@@ -6,12 +6,15 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/calc"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/repository"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/server"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/service"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/logging"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/mgmtserver"
 	"github.com/belo4ya/runy"
+	"github.com/dgraph-io/badger/v4"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -49,13 +52,23 @@ func run() error {
 
 	clientOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	calcSvc := service.NewCalculatorService(conf)
+	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	if err != nil {
+		return fmt.Errorf("open badger: %w", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	repo := repository.New(db)
+
+	calcSvc := service.NewCalculatorService(conf, calc.NewCalculator(), repo)
 	calcSvc.Register(grpcSrv.GRPC)
 	if err := calcSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
 		return fmt.Errorf("calculator service: register grpc gateway: %w", err)
 	}
 
-	agentSvc := service.NewAgentService(conf)
+	agentSvc := service.NewAgentService(conf, repo)
 	agentSvc.Register(grpcSrv.GRPC)
 	if err := agentSvc.RegisterGRPCGateway(ctx, httpSrv.Mux, conf.GRPCAddr, clientOpts); err != nil {
 		return fmt.Errorf("agent service: register grpc gateway: %w", err)
