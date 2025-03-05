@@ -5,20 +5,23 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"math"
+	"time"
 
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
-	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/model"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/repository/modelv2"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type AgentRepository interface {
-	GetTask(context.Context) (model.Task, error)
-	UpdateTask(context.Context, *calculatorv1.SubmitTaskResultRequest) error
+	GetTask(context.Context) (modelv2.Task, error)
+	UpdateTask(context.Context, modelv2.UpdateTaskCmd) error
 }
 
 type AgentService struct {
@@ -53,19 +56,63 @@ func (s *AgentService) GetTask(ctx context.Context, _ *emptypb.Empty) (*calculat
 		return nil, InternalError(err)
 	}
 
-	_ = task
 	return &calculatorv1.GetTaskResponse{Task: &calculatorv1.Task{
-		Id:            "",
-		Arg1:          0,
-		Arg2:          0,
-		Operation:     0,
-		OperationTime: nil,
+		Id:            task.ID,
+		Arg1:          task.Arg1,
+		Arg2:          task.Arg2,
+		Operation:     mapTaskOperation(task.Operation),
+		OperationTime: mapTaskOperationTime(task.Operation, s.conf),
 	}}, nil
 }
 
 func (s *AgentService) SubmitTaskResult(ctx context.Context, req *calculatorv1.SubmitTaskResultRequest) (*emptypb.Empty, error) {
-	if err := s.repo.UpdateTask(ctx, req); err != nil {
+	var updateTask modelv2.UpdateTaskCmd
+	if math.IsNaN(req.Result) {
+		updateTask = modelv2.UpdateTaskCmd{
+			ID:     req.Id,
+			Status: modelv2.TaskStatusFailed,
+			Result: 0,
+		}
+	} else {
+		updateTask = modelv2.UpdateTaskCmd{
+			ID:     req.Id,
+			Status: modelv2.TaskStatusCompleted,
+			Result: req.Result,
+		}
+	}
+
+	if err := s.repo.UpdateTask(ctx, updateTask); err != nil {
 		return nil, InternalError(err)
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func mapTaskOperation(s modelv2.TaskOperation) calculatorv1.TaskOperation {
+	switch s {
+	case modelv2.TaskOperationAddition:
+		return calculatorv1.TaskOperation_TASK_OPERATION_ADDITION
+	case modelv2.TaskOperationSubtraction:
+		return calculatorv1.TaskOperation_TASK_OPERATION_SUBTRACTION
+	case modelv2.TaskOperationMultiplication:
+		return calculatorv1.TaskOperation_TASK_OPERATION_MULTIPLICATION
+	case modelv2.TaskOperationDivision:
+		return calculatorv1.TaskOperation_TASK_OPERATION_DIVISION
+	default:
+		return calculatorv1.TaskOperation_TASK_OPERATION_UNSPECIFIED
+	}
+}
+
+func mapTaskOperationTime(op modelv2.TaskOperation, conf *config.Config) *durationpb.Duration {
+	ms := 0
+	switch op {
+	case modelv2.TaskOperationAddition:
+		ms = conf.TimeAdditionMs
+	case modelv2.TaskOperationSubtraction:
+		ms = conf.TimeSubtractionMs
+	case modelv2.TaskOperationMultiplication:
+		ms = conf.TimeMultiplicationMs
+	case modelv2.TaskOperationDivision:
+		ms = conf.TimeDivisionMs
+	}
+	return durationpb.New(time.Duration(ms) * time.Millisecond)
 }

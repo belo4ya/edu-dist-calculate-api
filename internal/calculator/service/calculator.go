@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/calc"
 	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/config"
-	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/model"
+	"github.com/belo4ya/edu-dist-calculate-api/internal/calculator/repository/modelv2"
 	calculatorv1 "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -17,14 +18,14 @@ import (
 )
 
 type Calculator interface {
-	Parse(string) ([]model.Token, error)
-	Schedule([]model.Token) []model.Task
+	Parse(string) ([]calc.Token, error)
+	Schedule([]calc.Token) []calc.Task
 }
 
 type CalculatorRepository interface {
-	CreateExpression(context.Context, model.Expression, []model.Task) (string, error)
-	ListExpressions(context.Context) ([]model.Expression, error)
-	GetExpression(context.Context, string) (model.Expression, error)
+	CreateExpression(context.Context, modelv2.CreateExpressionCmd, []modelv2.CreateExpressionTaskCmd) (string, error)
+	ListExpressions(context.Context) ([]modelv2.Expression, error)
+	GetExpression(context.Context, string) (modelv2.Expression, error)
 }
 
 type CalculatorService struct {
@@ -55,7 +56,7 @@ func (s *CalculatorService) RegisterGRPCGateway(ctx context.Context, mux *runtim
 func (s *CalculatorService) Calculate(ctx context.Context, req *calculatorv1.CalculateRequest) (*calculatorv1.CalculateResponse, error) {
 	parsed, err := s.calc.Parse(req.Expression)
 	if err != nil {
-		if errors.Is(err, nil) {
+		if errors.Is(err, calc.ErrInvalidExpr) {
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid expression %q: %s", req.Expression, err.Error()))
 		}
 		return nil, InternalError(err)
@@ -63,15 +64,20 @@ func (s *CalculatorService) Calculate(ctx context.Context, req *calculatorv1.Cal
 
 	tasks := s.calc.Schedule(parsed)
 
-	expr := model.Expression{
-		ID:           0,
-		Expression:   "",
-		Status:       "",
-		Result:       0,
-		ErrorMessage: "",
+	createExpr := modelv2.CreateExpressionCmd{Expression: req.Expression}
+	createTasks := make([]modelv2.CreateExpressionTaskCmd, 0, len(tasks))
+	for _, t := range tasks {
+		createTasks = append(createTasks, modelv2.CreateExpressionTaskCmd{
+			ID:            t.ID,
+			ParentTask1ID: t.ParentTask1ID,
+			ParentTask2ID: t.ParentTask2ID,
+			Arg1:          t.Arg1,
+			Arg2:          t.Arg2,
+			Operation:     t.Operation,
+		})
 	}
 
-	id, err := s.repo.CreateExpression(ctx, expr, tasks)
+	id, err := s.repo.CreateExpression(ctx, createExpr, createTasks)
 	if err != nil {
 		return nil, InternalError(err)
 	}
@@ -85,16 +91,14 @@ func (s *CalculatorService) ListExpressions(ctx context.Context, _ *emptypb.Empt
 		return nil, InternalError(err)
 	}
 
-	resp := &calculatorv1.ListExpressionsResponse{Expressions: make([]*calculatorv1.Expression, len(exprs))}
-	for i, expr := range exprs {
-		_ = expr
-		resp.Expressions[i] = &calculatorv1.Expression{
-			Id:     "",
-			Status: 0,
-			Result: nil,
-		}
+	resp := &calculatorv1.ListExpressionsResponse{Expressions: make([]*calculatorv1.Expression, 0, len(exprs))}
+	for _, expr := range exprs {
+		resp.Expressions = append(resp.Expressions, &calculatorv1.Expression{
+			Id:     expr.ID,
+			Status: mapExprStatus(expr.Status),
+			Result: expr.Result,
+		})
 	}
-
 	return resp, nil
 }
 
@@ -107,12 +111,27 @@ func (s *CalculatorService) GetExpression(ctx context.Context, req *calculatorv1
 		return nil, InternalError(err)
 	}
 
-	_ = expr
 	return &calculatorv1.GetExpressionResponse{
 		Expression: &calculatorv1.Expression{
-			Id:     "",
-			Status: 0,
-			Result: nil,
+			Id:     expr.ID,
+			Status: mapExprStatus(expr.Status),
+			Result: expr.Result,
 		},
 	}, nil
+}
+
+func mapExprStatus(s modelv2.ExpressionStatus) calculatorv1.ExpressionStatus {
+	if s == modelv2.ExpressionStatusPending {
+		return calculatorv1.ExpressionStatus_EXPRESSION_STATUS_PENDING
+	}
+	if s == modelv2.ExpressionStatusInProgress {
+		return calculatorv1.ExpressionStatus_EXPRESSION_STATUS_IN_PROGRESS
+	}
+	if s == modelv2.ExpressionStatusCompleted {
+		return calculatorv1.ExpressionStatus_EXPRESSION_STATUS_COMPLETED
+	}
+	if s == modelv2.ExpressionStatusFailed {
+		return calculatorv1.ExpressionStatus_EXPRESSION_STATUS_FAILED
+	}
+	return calculatorv1.ExpressionStatus_EXPRESSION_STATUS_UNSPECIFIED
 }

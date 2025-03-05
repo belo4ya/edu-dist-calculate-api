@@ -25,12 +25,12 @@ service AgentService {
 }
 
 // Operations for calculation
-enum Operation {
-  OPERATION_UNSPECIFIED = 0;
-  OPERATION_ADDITION = 1;
-  OPERATION_SUBTRACTION = 2;
-  OPERATION_MULTIPLICATION = 3;
-  OPERATION_DIVISION = 4;
+enum TaskOperation {
+  TASK_OPERATION_UNSPECIFIED = 0;
+  TASK_OPERATION_ADDITION = 1;
+  TASK_OPERATION_SUBTRACTION = 2;
+  TASK_OPERATION_MULTIPLICATION = 3;
+  TASK_OPERATION_DIVISION = 4;
 }
 
 // Task for agent
@@ -38,7 +38,7 @@ message Task {
   string id = 1;
   double arg1 = 2;
   double arg2 = 3;
-  Operation operation = 4;
+  TaskOperation operation = 4;
   google.protobuf.Duration operation_time = 5;
 }
 

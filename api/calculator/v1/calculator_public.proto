@@ -51,7 +51,7 @@ message CalculateResponse {
 message Expression {
   string id = 1;
   ExpressionStatus status = 2;
-  optional double result = 3;
+  double result = 3;
 }
 
 // List of expressions

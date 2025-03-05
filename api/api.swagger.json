@@ -266,16 +266,6 @@
       },
       "title": "List of expressions"
     },
-    "v1Operation": {
-      "type": "string",
-      "enum": [
-        "OPERATION_ADDITION",
-        "OPERATION_SUBTRACTION",
-        "OPERATION_MULTIPLICATION",
-        "OPERATION_DIVISION"
-      ],
-      "title": "Operations for calculation"
-    },
     "v1SubmitTaskResultRequest": {
       "type": "object",
       "properties": {
@@ -304,13 +294,23 @@
           "format": "double"
         },
         "operation": {
-          "$ref": "#/definitions/v1Operation"
+          "$ref": "#/definitions/v1TaskOperation"
         },
         "operation_time": {
           "type": "string"
         }
       },
       "title": "Task for agent"
+    },
+    "v1TaskOperation": {
+      "type": "string",
+      "enum": [
+        "TASK_OPERATION_ADDITION",
+        "TASK_OPERATION_SUBTRACTION",
+        "TASK_OPERATION_MULTIPLICATION",
+        "TASK_OPERATION_DIVISION"
+      ],
+      "title": "Operations for calculation"
     }
   }
 }
