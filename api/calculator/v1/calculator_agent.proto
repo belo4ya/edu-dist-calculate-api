@@ -5,6 +5,7 @@ package calculator.v1;
 import "google/api/annotations.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/belo4ya/edu-dist-calculate-api/pkg/calculator/v1;v1";
 
@@ -21,6 +22,11 @@ service AgentService {
       post: "/internal/task"
       body: "*"
     };
+  }
+
+  // Get list of expression's tasks (for debug)
+  rpc ListExpressionTasks(ListExpressionTasksRequest) returns (ListExpressionTasksResponse) {
+    option (google.api.http) = {get: "/internal/expressions/{id}/tasks"};
   }
 }
 
@@ -51,4 +57,37 @@ message GetTaskResponse {
 message SubmitTaskResultRequest {
   string id = 1;
   double result = 2;
+}
+
+// Request for list of expression's tasks
+message ListExpressionTasksRequest {
+  string id = 1;
+}
+
+// List of expression's tasks
+message ListExpressionTasksResponse {
+  enum TaskStatus {
+    TASK_STATUS_UNSPECIFIED = 0;
+    TASK_STATUS_PENDING = 1;
+    TASK_STATUS_IN_PROGRESS = 2;
+    TASK_STATUS_COMPLETED = 3;
+    TASK_STATUS_FAILED = 4;
+  }
+
+  message Task {
+    string id = 1;
+    string expression_id = 2;
+    string parent_task_1_id = 3;
+    string parent_task_2_id = 4;
+    double arg_1 = 5;
+    double arg_2 = 6;
+    TaskOperation operation = 7;
+    google.protobuf.Duration operation_time = 8;
+    TaskStatus status = 9;
+    double result = 10;
+    google.protobuf.Timestamp expire_at = 11;
+    google.protobuf.Timestamp created_at = 12;
+    google.protobuf.Timestamp updated_at = 13;
+  }
+  repeated Task tasks = 1;
 }

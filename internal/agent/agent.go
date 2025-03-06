@@ -81,13 +81,13 @@ func (a *Agent) executeTask(task *calculatorv1.Task) float64 {
 	time.Sleep(task.OperationTime.AsDuration())
 
 	switch task.Operation {
-	case calculatorv1.Operation_OPERATION_ADDITION:
+	case calculatorv1.TaskOperation_TASK_OPERATION_ADDITION:
 		return task.Arg1 + task.Arg2
-	case calculatorv1.Operation_OPERATION_SUBTRACTION:
+	case calculatorv1.TaskOperation_TASK_OPERATION_SUBTRACTION:
 		return task.Arg1 - task.Arg2
-	case calculatorv1.Operation_OPERATION_MULTIPLICATION:
+	case calculatorv1.TaskOperation_TASK_OPERATION_MULTIPLICATION:
 		return task.Arg1 * task.Arg2
-	case calculatorv1.Operation_OPERATION_DIVISION:
+	case calculatorv1.TaskOperation_TASK_OPERATION_DIVISION:
 		if task.Arg2 == 0 {
 			return math.NaN()
 		}

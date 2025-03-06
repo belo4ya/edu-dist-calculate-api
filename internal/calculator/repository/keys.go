@@ -9,6 +9,10 @@ func exprListKey(id string) []byte {
 	return []byte("expr:list:" + id)
 }
 
+func exprListPrefix() []byte {
+	return []byte("expr:list:")
+}
+
 func exprTasksPrefix(exprID string) []byte {
 	return []byte("expr:" + exprID + ":tasks:")
 }

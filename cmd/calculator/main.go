@@ -52,7 +52,7 @@ func run() error {
 
 	clientOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	db, err := badger.Open(badger.DefaultOptions("/tmp/badger1"))
 	if err != nil {
 		return fmt.Errorf("open badger: %w", err)
 	}

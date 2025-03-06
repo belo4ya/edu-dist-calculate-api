@@ -106,6 +106,37 @@
         ]
       }
     },
+    "/internal/expressions/{id}/tasks": {
+      "get": {
+        "summary": "Get list of expression's tasks (for debug)",
+        "operationId": "AgentService_ListExpressionTasks",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListExpressionTasksResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AgentService"
+        ]
+      }
+    },
     "/internal/task": {
       "get": {
         "summary": "Get task for execution (for agents)",
@@ -163,6 +194,38 @@
     }
   },
   "definitions": {
+    "ListExpressionTasksResponseTaskStatus": {
+      "type": "string",
+      "enum": [
+        "TASK_STATUS_PENDING",
+        "TASK_STATUS_IN_PROGRESS",
+        "TASK_STATUS_COMPLETED",
+        "TASK_STATUS_FAILED"
+      ]
+    },
+    "calculatorv1Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "arg1": {
+          "type": "number",
+          "format": "double"
+        },
+        "arg2": {
+          "type": "number",
+          "format": "double"
+        },
+        "operation": {
+          "$ref": "#/definitions/v1TaskOperation"
+        },
+        "operation_time": {
+          "type": "string"
+        }
+      },
+      "title": "Task for agent"
+    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -248,10 +311,73 @@
       "type": "object",
       "properties": {
         "task": {
-          "$ref": "#/definitions/v1Task"
+          "$ref": "#/definitions/calculatorv1Task"
         }
       },
       "title": "Response with task for agent"
+    },
+    "v1ListExpressionTasksResponse": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ListExpressionTasksResponseTask"
+          }
+        }
+      },
+      "title": "List of expression's tasks"
+    },
+    "v1ListExpressionTasksResponseTask": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "expression_id": {
+          "type": "string"
+        },
+        "parent_task_1_id": {
+          "type": "string"
+        },
+        "parent_task_2_id": {
+          "type": "string"
+        },
+        "arg_1": {
+          "type": "number",
+          "format": "double"
+        },
+        "arg_2": {
+          "type": "number",
+          "format": "double"
+        },
+        "operation": {
+          "$ref": "#/definitions/v1TaskOperation"
+        },
+        "operation_time": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ListExpressionTasksResponseTaskStatus"
+        },
+        "result": {
+          "type": "number",
+          "format": "double"
+        },
+        "expire_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     },
     "v1ListExpressionsResponse": {
       "type": "object",
@@ -278,29 +404,6 @@
         }
       },
       "title": "Request to submit task result"
-    },
-    "v1Task": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "arg1": {
-          "type": "number",
-          "format": "double"
-        },
-        "arg2": {
-          "type": "number",
-          "format": "double"
-        },
-        "operation": {
-          "$ref": "#/definitions/v1TaskOperation"
-        },
-        "operation_time": {
-          "type": "string"
-        }
-      },
-      "title": "Task for agent"
     },
     "v1TaskOperation": {
       "type": "string",

@@ -20,7 +20,13 @@ func New(db *badger.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpressionCmd, tasksCmd []modelv2.CreateExpressionTaskCmd) (string, error) {
+var emptyVal = []byte{1}
+
+func (r *Repository) CreateExpression(
+	_ context.Context,
+	cmd modelv2.CreateExpressionCmd,
+	tasksCmd []modelv2.CreateExpressionTaskCmd,
+) (string, error) {
 	now := time.Now().UTC()
 
 	expr := modelv2.Expression{
@@ -58,12 +64,7 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 		}
 
 		// Add to expression list
-		listData, err := json.Marshal(expr.ID)
-		if err != nil {
-			return err
-		}
-		err = txn.Set([]byte("expr:list:"+expr.ID), listData)
-		if err != nil {
+		if err = txn.Set(exprListKey(expr.ID), []byte(expr.ID)); err != nil {
 			return err
 		}
 
@@ -74,23 +75,18 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 			if err != nil {
 				return err
 			}
-			err = txn.Set([]byte("task:"+task.ID), taskData)
-			if err != nil {
+			if err := txn.Set(taskKey(task.ID), taskData); err != nil {
 				return err
 			}
 
 			// Add to expression's task list
-			exprTaskKey := []byte("expr:" + expr.ID + ":tasks:" + task.ID)
-			err = txn.Set(exprTaskKey, []byte{1})
-			if err != nil {
+			if err = txn.Set(exprTaskKey(expr.ID, task.ID), emptyVal); err != nil {
 				return err
 			}
 
 			// Add to pending task queue if it's ready to be executed
 			if task.ParentTask1ID == "" && task.ParentTask2ID == "" {
-				taskQueueKey := []byte("task:queue:pending")
-				err = txn.Set(append(taskQueueKey, []byte(":"+task.ID)...), []byte{1})
-				if err != nil {
+				if err = txn.Set(taskQueuePendingKey(task.ID), emptyVal); err != nil {
 					return err
 				}
 			}
@@ -100,33 +96,30 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 	})
 
 	if err != nil {
-		return "", fmt.Errorf("db update: %w", err)
+		return "", err
 	}
 
 	return expr.ID, nil
 }
 
 func (r *Repository) ListExpressions(_ context.Context) ([]modelv2.Expression, error) {
-	exprs := make([]modelv2.Expression, 0)
+	var exprs []modelv2.Expression
 
 	err := r.db.View(func(txn *badger.Txn) error {
-		// Create an iterator with prefix for the expression list
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 
-		prefix := []byte("expr:list:")
+		prefix := exprListPrefix()
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			// Get expression ID from the list
 			var exprID string
-			err := it.Item().Value(func(val []byte) error {
-				return json.Unmarshal(val, &exprID)
+			_ = it.Item().Value(func(val []byte) error {
+				exprID = string(val)
+				return nil
 			})
-			if err != nil {
-				return err
-			}
 
 			// Fetch the actual expression data using its ID
-			item, err := txn.Get([]byte("expr:" + exprID))
+			item, err := txn.Get(exprKey(exprID))
 			if err != nil {
 				return err
 			}
@@ -147,7 +140,7 @@ func (r *Repository) ListExpressions(_ context.Context) ([]modelv2.Expression, e
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("db view: %w", err)
+		return nil, err
 	}
 
 	return exprs, nil
@@ -541,7 +534,7 @@ func (r *Repository) queueDependentTasks(txn *badger.Txn, completedTask modelv2.
 				}
 
 				// Add to pending queue
-				if err := txn.Set([]byte("task:queue:pending:"+task.ID), []byte{1}); err != nil {
+				if err := txn.Set([]byte("task:queue:pending:"+task.ID), emptyVal); err != nil {
 					continue
 				}
 			}
@@ -665,6 +658,57 @@ func (r *Repository) failDependentTasks(txn *badger.Txn, failedTask modelv2.Task
 	}
 
 	return txn.Set(exprKey, exprData)
+}
+
+func (r *Repository) ListExpressionTasks(_ context.Context, id string) ([]modelv2.Task, error) {
+	var tasks []modelv2.Task
+
+	err := r.db.View(func(txn *badger.Txn) error {
+		// First check if the expression exists
+		if _, err := txn.Get(exprKey(id)); err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				return fmt.Errorf("expression with id %s not found", id)
+			}
+			return err
+		}
+
+		// Expression exists, now get all its tasks
+		prefix := exprTasksPrefix(id)
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// Get task ID from the key
+			taskID := taskIDFromExprTaskKey(it.Item().Key(), id)
+
+			// Get the actual task data
+			taskItem, err := txn.Get(taskKey(taskID))
+			if err != nil {
+				// Log error but continue with other tasks
+				continue
+			}
+
+			// Deserialize the task
+			var task modelv2.Task
+			err = taskItem.Value(func(val []byte) error {
+				return json.Unmarshal(val, &task)
+			})
+			if err != nil {
+				// Log error but continue with other tasks
+				continue
+			}
+
+			tasks = append(tasks, task)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("list expression tasks: %w", err)
+	}
+
+	return tasks, nil
 }
 
 //func mapTaskOperation(s string) modelv2.TaskOperation {

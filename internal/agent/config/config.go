@@ -16,7 +16,7 @@ type Config struct {
 func Load() (*Config, error) {
 	conf := &Config{
 		LogLevel:          "info",
-		MgmtAddr:          ":8081",
+		MgmtAddr:          ":8082",
 		CalculatorAPIAddr: ":50051",
 		ComputingPower:    10,
 	}

@@ -17,11 +17,13 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type AgentRepository interface {
 	GetPendingTask(context.Context) (modelv2.Task, error)
 	FinishTask(context.Context, modelv2.UpdateTaskCmd) error
+	ListExpressionTasks(context.Context, string) ([]modelv2.Task, error)
 }
 
 type AgentService struct {
@@ -87,6 +89,38 @@ func (s *AgentService) SubmitTaskResult(ctx context.Context, req *calculatorv1.S
 	return &emptypb.Empty{}, nil
 }
 
+func (s *AgentService) ListExpressionTasks(
+	ctx context.Context,
+	req *calculatorv1.ListExpressionTasksRequest,
+) (*calculatorv1.ListExpressionTasksResponse, error) {
+	tasks, err := s.repo.ListExpressionTasks(ctx, req.Id)
+	if err != nil {
+		return nil, InternalError(err)
+	}
+
+	resp := &calculatorv1.ListExpressionTasksResponse{
+		Tasks: make([]*calculatorv1.ListExpressionTasksResponse_Task, 0, len(tasks)),
+	}
+	for _, task := range tasks {
+		resp.Tasks = append(resp.Tasks, &calculatorv1.ListExpressionTasksResponse_Task{
+			Id:             task.ID,
+			ExpressionId:   task.ExpressionID,
+			ParentTask_1Id: task.ParentTask1ID,
+			ParentTask_2Id: task.ParentTask2ID,
+			Arg_1:          task.Arg1,
+			Arg_2:          task.Arg2,
+			Operation:      mapTaskOperation(task.Operation),
+			OperationTime:  mapTaskOperationTime(task.Operation, s.conf),
+			Status:         mapTaskStatus(task.Status),
+			Result:         task.Result,
+			ExpireAt:       timestamppb.New(task.ExpireAt),
+			CreatedAt:      timestamppb.New(task.CreatedAt),
+			UpdatedAt:      timestamppb.New(task.UpdatedAt),
+		})
+	}
+	return resp, nil
+}
+
 func mapTaskOperation(s modelv2.TaskOperation) calculatorv1.TaskOperation {
 	switch s {
 	case modelv2.TaskOperationAddition:
@@ -115,4 +149,19 @@ func mapTaskOperationTime(op modelv2.TaskOperation, conf *config.Config) *durati
 		ms = conf.TimeDivisionMs
 	}
 	return durationpb.New(time.Duration(ms) * time.Millisecond)
+}
+
+func mapTaskStatus(s modelv2.TaskStatus) calculatorv1.ListExpressionTasksResponse_TaskStatus {
+	switch s {
+	case modelv2.TaskStatusPending:
+		return calculatorv1.ListExpressionTasksResponse_TASK_STATUS_PENDING
+	case modelv2.TaskStatusInProgress:
+		return calculatorv1.ListExpressionTasksResponse_TASK_STATUS_IN_PROGRESS
+	case modelv2.TaskStatusCompleted:
+		return calculatorv1.ListExpressionTasksResponse_TASK_STATUS_COMPLETED
+	case modelv2.TaskStatusFailed:
+		return calculatorv1.ListExpressionTasksResponse_TASK_STATUS_FAILED
+	default:
+		return calculatorv1.ListExpressionTasksResponse_TASK_STATUS_UNSPECIFIED
+	}
 }
