@@ -8,12 +8,14 @@ import (
 )
 
 func main() {
-	s := "2 + 2 * 2 + (9 + 3)"
+	s := "2 + 2 * 2 + (9 + 3) / 3"
 
 	c := &calc.Calculator{}
 	rpn, err := c.Parse(s)
 	if err != nil {
 		slog.Error("error", "error", err)
 	}
-	fmt.Printf("%+v\n", rpn)
+	fmt.Printf("rpn: %+v\n", rpn)
+
+	fmt.Printf("plan: %+v\n", c.Schedule(rpn))
 }
