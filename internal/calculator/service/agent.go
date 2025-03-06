@@ -20,8 +20,8 @@ import (
 )
 
 type AgentRepository interface {
-	GetTask(context.Context) (modelv2.Task, error)
-	UpdateTask(context.Context, modelv2.UpdateTaskCmd) error
+	GetPendingTask(context.Context) (modelv2.Task, error)
+	FinishTask(context.Context, modelv2.UpdateTaskCmd) error
 }
 
 type AgentService struct {
@@ -48,7 +48,7 @@ func (s *AgentService) RegisterGRPCGateway(ctx context.Context, mux *runtime.Ser
 }
 
 func (s *AgentService) GetTask(ctx context.Context, _ *emptypb.Empty) (*calculatorv1.GetTaskResponse, error) {
-	task, err := s.repo.GetTask(ctx)
+	task, err := s.repo.GetPendingTask(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "no tasks yet, try later")
@@ -81,7 +81,7 @@ func (s *AgentService) SubmitTaskResult(ctx context.Context, req *calculatorv1.S
 		}
 	}
 
-	if err := s.repo.UpdateTask(ctx, updateTask); err != nil {
+	if err := s.repo.FinishTask(ctx, updateTask); err != nil {
 		return nil, InternalError(err)
 	}
 	return &emptypb.Empty{}, nil

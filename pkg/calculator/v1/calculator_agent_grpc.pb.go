@@ -20,7 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetTask_FullMethodName          = "/calculator.v1.AgentService/GetTask"
+	AgentService_GetTask_FullMethodName          = "/calculator.v1.AgentService/GetPendingTask"
 	AgentService_SubmitTaskResult_FullMethodName = "/calculator.v1.AgentService/SubmitTaskResult"
 )
 
@@ -84,7 +84,7 @@ type AgentServiceServer interface {
 type UnimplementedAgentServiceServer struct{}
 
 func (UnimplementedAgentServiceServer) GetTask(context.Context, *emptypb.Empty) (*GetTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTask not implemented")
+	return nil, status.Errorf(codes.Unimplemented, "method GetPendingTask not implemented")
 }
 func (UnimplementedAgentServiceServer) SubmitTaskResult(context.Context, *SubmitTaskResultRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubmitTaskResult not implemented")
@@ -153,7 +153,7 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AgentServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetTask",
+			MethodName: "GetPendingTask",
 			Handler:    _AgentService_GetTask_Handler,
 		},
 		{

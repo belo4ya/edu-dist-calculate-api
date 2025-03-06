@@ -347,9 +347,9 @@ var file_calculator_v1_calculator_agent_proto_depIdxs = []int32{
 	0, // 0: calculator.v1.Task.operation:type_name -> calculator.v1.TaskOperation
 	4, // 1: calculator.v1.Task.operation_time:type_name -> google.protobuf.Duration
 	1, // 2: calculator.v1.GetTaskResponse.task:type_name -> calculator.v1.Task
-	5, // 3: calculator.v1.AgentService.GetTask:input_type -> google.protobuf.Empty
+	5, // 3: calculator.v1.AgentService.GetPendingTask:input_type -> google.protobuf.Empty
 	3, // 4: calculator.v1.AgentService.SubmitTaskResult:input_type -> calculator.v1.SubmitTaskResultRequest
-	2, // 5: calculator.v1.AgentService.GetTask:output_type -> calculator.v1.GetTaskResponse
+	2, // 5: calculator.v1.AgentService.GetPendingTask:output_type -> calculator.v1.GetTaskResponse
 	5, // 6: calculator.v1.AgentService.SubmitTaskResult:output_type -> google.protobuf.Empty
 	5, // [5:7] is the sub-list for method output_type
 	3, // [3:5] is the sub-list for method input_type

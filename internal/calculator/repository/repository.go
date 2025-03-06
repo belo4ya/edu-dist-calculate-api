@@ -27,8 +27,6 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 		ID:         xid.New().String(),
 		Expression: cmd.Expression,
 		Status:     modelv2.ExpressionStatusPending,
-		Result:     0,
-		Error:      "",
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -44,8 +42,6 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 			Arg2:          t.Arg2,
 			Operation:     t.Operation,
 			Status:        modelv2.TaskStatusPending,
-			Result:        0,
-			ExpireAt:      time.Time{},
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		})
@@ -57,8 +53,7 @@ func (r *Repository) CreateExpression(_ context.Context, cmd modelv2.CreateExpre
 		if err != nil {
 			return err
 		}
-		err = txn.Set([]byte("expr:"+expr.ID), exprData)
-		if err != nil {
+		if err = txn.Set(exprKey(expr.ID), exprData); err != nil {
 			return err
 		}
 
@@ -187,7 +182,7 @@ func (r *Repository) GetExpression(_ context.Context, id string) (modelv2.Expres
 	return expr, nil
 }
 
-func (r *Repository) GetTask(_ context.Context) (modelv2.Task, error) {
+func (r *Repository) GetPendingTask(_ context.Context) (modelv2.Task, error) {
 	var task modelv2.Task
 	var taskID string
 
@@ -280,7 +275,7 @@ func (r *Repository) GetTask(_ context.Context) (modelv2.Task, error) {
 	return task, nil
 }
 
-func (r *Repository) UpdateTask(_ context.Context, cmd modelv2.UpdateTaskCmd) error {
+func (r *Repository) FinishTask(_ context.Context, cmd modelv2.UpdateTaskCmd) error {
 	return r.db.Update(func(txn *badger.Txn) error {
 		// First, retrieve the existing task
 		taskKey := []byte("task:" + cmd.ID)
