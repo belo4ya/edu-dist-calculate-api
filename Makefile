@@ -5,7 +5,7 @@ gen-proto:
 
 .PHONY: gen-mocks
 gen-mocks:
-	mockery
+	go run github.com/vektra/mockery/v2@v2.52.1
 
 .PHONY: generate
 generate: gen-proto gen-mocks
@@ -26,7 +26,7 @@ up:
 #***** Lint
 .PHONY: lint
 lint:
-	golangci-lint run ./...
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.6 run ./...
 
 #***** Tests
 .PHONY: test

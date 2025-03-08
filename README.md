@@ -76,10 +76,20 @@ UUID'ы и Series слишком скучно (см. [awesome identifiers](https
 make up
 ```
 
+Для тех у кого болит Docker
+
+```shell
+go run ./cmd/calculator &
+go run ./cmd/agent &
+# не забудь остановить процессы с помощью kill <pid>
+```
+
 Запуск рутины:
 
 ```shell
-go mod tidy && make generate lint test-cov
+go mod tidy
+make generate # requires buf: brew install bufbuild/buf/buf (см. https://buf.build/docs/cli/installation/)
+make lint test-cov
 ```
 
 ## 💡 Использование
@@ -91,7 +101,7 @@ go mod tidy && make generate lint test-cov
 или [api/api.swagger.json](api/api.swagger.json).
 
 Вместо UI интерактивно поработать с HTTP API сервиса можно с помощью SwaggerUI,
-доступного по адресу [localhost:8080/docs/](http://localhost:8080/docs/).
+доступного по адресу [http://localhost:8080/docs/](http://localhost:8080/docs/).
 
 <details>
 <summary>Картинка</summary>
