@@ -6,6 +6,8 @@ packages:
   github.com/belo4ya/edu-dist-calculate-api/internal/agent:
     config:
       all: True
+      dir: "internal/testutil/mocks/{{.PackageName}}"
   github.com/belo4ya/edu-dist-calculate-api/internal/calculator/service:
     config:
       all: True
+      dir: "internal/testutil/mocks/calculator/{{.PackageName}}"

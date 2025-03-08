@@ -85,10 +85,10 @@ func (c *Calculator) tokenize(s string) ([]types.Token, error) {
 				if err != nil {
 					return nil, types.ErrInvalidExpr
 				}
-				tokens = append(tokens, types.Token{IsNumber: true, Number: num})
+				tokens = append(tokens, types.NewToken(num))
 				numberBuf.Reset()
 			}
-			tokens = append(tokens, types.Token{IsNumber: false, Symbol: ch})
+			tokens = append(tokens, types.NewToken(ch))
 		}
 	}
 	if numberBuf.Len() > 0 {
@@ -96,7 +96,7 @@ func (c *Calculator) tokenize(s string) ([]types.Token, error) {
 		if err != nil {
 			return nil, types.ErrInvalidExpr
 		}
-		tokens = append(tokens, types.Token{IsNumber: true, Number: num})
+		tokens = append(tokens, types.NewToken(num))
 	}
 	return tokens, nil
 }
@@ -151,7 +151,7 @@ func (c *Calculator) validateRPN(rpn []types.Token) error {
 		}
 
 		_, _ = stack.SafePop(), stack.SafePop()
-		stack.Push(types.Token{IsNumber: false, Symbol: "$"})
+		stack.Push(types.NewToken("$"))
 	}
 
 	if stack.Size() != 1 {

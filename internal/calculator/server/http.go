@@ -25,18 +25,23 @@ type HTTPServer struct {
 }
 
 func NewHTTPServer(conf *config.Config) *HTTPServer {
+	s := &HTTPServer{conf: conf}
+
 	mux := http.NewServeMux()
-	gwmux := runtime.NewServeMux(runtime.WithForwardResponseOption(httpResponseModifier))
+	s.setupDocsRoutes(mux)
+
+	gwmux := runtime.NewServeMux(
+		runtime.WithForwardResponseOption(s.grpcGatewayResponseModifier),
+		runtime.WithErrorHandler(s.grpcGatewayErrorHandler),
+	)
 	mux.Handle("/", gwmux)
-	handleDocs(mux)
-	return &HTTPServer{
-		HTTP: &http.Server{
-			Addr:    conf.HTTPAddr,
-			Handler: mux,
-		},
-		GWMux: gwmux,
-		conf:  conf,
+
+	s.GWMux = gwmux
+	s.HTTP = &http.Server{
+		Addr:    conf.HTTPAddr,
+		Handler: mux,
 	}
+	return s
 }
 
 func (s *HTTPServer) Start(ctx context.Context) error {
@@ -62,35 +67,59 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 	}
 }
 
-const MetadataHeaderHTTPCode = "x-http-code"
+const mdHeaderHTTPCode = "x-http-code"
 
 func WithHTTPResponseCode(ctx context.Context, code int) {
-	_ = grpc.SetHeader(ctx, metadata.Pairs(MetadataHeaderHTTPCode, strconv.Itoa(code)))
+	_ = grpc.SetHeader(ctx, metadata.Pairs(mdHeaderHTTPCode, strconv.Itoa(code)))
 }
 
-func httpResponseModifier(ctx context.Context, w http.ResponseWriter, _ proto.Message) error {
-	md, ok := runtime.ServerMetadataFromContext(ctx)
-	if !ok {
-		return nil
-	}
-
-	if vals := md.HeaderMD.Get(MetadataHeaderHTTPCode); len(vals) > 0 {
-		code, err := strconv.Atoi(vals[0])
-		if err != nil {
-			return err
-		}
-		delete(md.HeaderMD, MetadataHeaderHTTPCode)
-		delete(w.Header(), "Grpc-Metadata-X-Http-Code")
-		w.WriteHeader(code)
-	}
-
-	return nil
-}
-
-func handleDocs(mux *http.ServeMux) {
+func (s *HTTPServer) setupDocsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/docs/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(api.OpenAPISpec)
 	})
 	mux.Handle("/docs/", httpSwagger.Handler(httpSwagger.URL("/docs/openapi.json")))
+}
+
+func (s *HTTPServer) grpcGatewayResponseModifier(ctx context.Context, w http.ResponseWriter, _ proto.Message) error {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return nil
+	}
+
+	if code, ok := s.getHTTPStatusFromMetadata(md, w); ok {
+		w.WriteHeader(code)
+	}
+	return nil
+}
+
+func (s *HTTPServer) grpcGatewayErrorHandler(
+	ctx context.Context,
+	mux *runtime.ServeMux,
+	marshaler runtime.Marshaler,
+	w http.ResponseWriter,
+	r *http.Request,
+	err error,
+) {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)
+		return
+	}
+
+	if code, ok := s.getHTTPStatusFromMetadata(md, w); ok {
+		err = &runtime.HTTPStatusError{HTTPStatus: code, Err: err}
+	}
+	runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)
+}
+
+func (s *HTTPServer) getHTTPStatusFromMetadata(md runtime.ServerMetadata, w http.ResponseWriter) (int, bool) {
+	if vals := md.HeaderMD.Get(mdHeaderHTTPCode); len(vals) > 0 {
+		if code, err := strconv.Atoi(vals[0]); err == nil {
+			delete(md.HeaderMD, mdHeaderHTTPCode)
+			delete(w.Header(), "Grpc-Metadata-X-Http-Code")
+			return code, true
+		}
+	}
+	return 0, false
 }

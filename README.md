@@ -18,7 +18,8 @@
 HTTP API реализован с помощью [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
 по верх grpc (см. [api/](api)).
 Было лень возиться с json-ами 🙄, брать фреймворк по типу fiber/echo/gin тоже лень.
-Решил поразбираться с [buf.build](https://buf.build/).
+Решил поразбираться с [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
+и [buf.build](https://buf.build/) для генерации.
 
 Реализованно персистентное хранение состояния сервиса Calculator с
 помощью [hypermodeinc/badger](https://github.com/hypermodeinc/badger) - key-value хранилища по типу RocksDB.
@@ -32,6 +33,12 @@ UUID'ы и Series слишком скучно (см. [awesome identifiers](https
 
 И у Calculator и у Agent есть MGMT-сервер - это HTTP-сервер с сервисными ручками `/metrics, /debug, /healthz, /readyz`.
 Зачем? Просто так 🙄.
+
+Для генерации mock'ов используется [mockery](https://github.com/vektra/mockery)
+(см. [internal/testutil/](internal/testutil)).
+
+Калькулятор ([calculator/calc/](internal/calculator/calc)) - не самая сильная часть этого приложения,
+можно убедиться в этом по тестам с флагом skip [calculator/calc/calc_test.go](internal/calculator/calc/calc_test.go).
 
 ## 🔧 Конфигурация
 
@@ -83,10 +90,13 @@ go mod tidy && make generate lint test-cov
 Спецификацию API можно найти в [api/calculator/v1](api/calculator/v1)
 или [api/api.swagger.json](api/api.swagger.json).
 
-Вместо UI интерактивно поработать с HTTP API сервиса можно с помощью SwaggerUI, доступного по
-адресу [localhost:8080/docs/](http://localhost:8080/docs/).
+Вместо UI интерактивно поработать с HTTP API сервиса можно с помощью SwaggerUI,
+доступного по адресу [localhost:8080/docs/](http://localhost:8080/docs/).
 
-<img src="docs/assets/swagger-ui.png" alt="" width="600">
+<details>
+<summary>Картинка</summary>
+<img src="docs/assets/swagger-ui.png" alt="" width="800">
+</details>
 
 ### Примеры curl
 
@@ -95,10 +105,7 @@ go mod tidy && make generate lint test-cov
 Отправка арифметического выражения на вычисление:
 
 ```shell
-curl -X 'POST' \
-  'http://localhost:8080/api/v1/calculate' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
+curl -X 'POST' 'http://localhost:8080/api/v1/calculate' \
   -d '{
   "expression": "2 + 2 * 2"
 }'
@@ -107,7 +114,7 @@ curl -X 'POST' \
 Ответ с кодом 201:
 
 ```json
-{ 
+{
   "id": "cv5t4a3j3vq37o313p5g"
 }
 ```
@@ -115,10 +122,7 @@ curl -X 'POST' \
 Отправка некорректного выражения:
 
 ```shell
-curl -X 'POST' \
-  'http://localhost:8080/api/v1/calculate' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
+curl -X 'POST' 'http://localhost:8080/api/v1/calculate' \
   -d '{
   "expression": "1+"
 }'
@@ -137,9 +141,7 @@ curl -X 'POST' \
 Получение информации о конкретном выражении по его идентификатору:
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/api/v1/expressions/cv5t97rj3vq3pl6kh1u0' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/api/v1/expressions/cv5t97rj3vq3pl6kh1u0'
 ```
 
 Ответ с кодом 200:
@@ -158,9 +160,7 @@ curl -X 'GET' \
 Запрос несуществующего выражения:
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/api/v1/expressions/notexists' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/api/v1/expressions/notexists'
 ```
 
 Ответ с кодом 404:
@@ -176,9 +176,7 @@ curl -X 'GET' \
 Получение списка всех отправленных выражений:
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/api/v1/expressions' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/api/v1/expressions'
 ```
 
 Ответ с кодом 200:
@@ -213,9 +211,7 @@ curl -X 'GET' \
 Запрос вычислительной задачи от Calculator:
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/internal/task' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/internal/task'
 ```
 
 Ответ с кодом 200:
@@ -235,9 +231,7 @@ curl -X 'GET' \
 Запрос задачи, когда доступных задач нет:
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/internal/task' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/internal/task'
 ```
 
 Ответ с кодом 404:
@@ -253,10 +247,7 @@ curl -X 'GET' \
 Отправка результата задачи обратно в Calculator:
 
 ```shell
-curl -X 'POST' \
-  'http://localhost:8080/internal/task' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
+curl -X 'POST' 'http://localhost:8080/internal/task' \
   -d '{
   "id": "cv5rjgjj3vqe6l04c50g",
   "result": 4
@@ -272,10 +263,7 @@ curl -X 'POST' \
 Отправка результата для несуществующей задачи:
 
 ```shell
-curl -X 'POST' \
-  'http://localhost:8080/internal/task' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
+curl -X 'POST' 'http://localhost:8080/internal/task' \
   -d '{
   "id": "notexists",
   "result": 4
@@ -297,9 +285,7 @@ curl -X 'POST' \
 Получение всех задач для конкретного выражения (полезно для отладки):
 
 ```shell
-curl -X 'GET' \
-  'http://localhost:8080/internal/v2/expressions/cv5rfcrj3vqdpq0e15b0/tasks' \
-  -H 'accept: application/json'
+curl 'http://localhost:8080/internal/v2/expressions/cv5rfcrj3vqdpq0e15b0/tasks'
 ```
 
 Ответ с кодом 200:

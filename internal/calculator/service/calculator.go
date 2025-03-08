@@ -64,6 +64,7 @@ func (s *CalculatorService) Calculate(
 	parsed, err := s.calc.Parse(req.Expression)
 	if err != nil {
 		if errors.Is(err, calctypes.ErrInvalidExpr) {
+			server.WithHTTPResponseCode(ctx, http.StatusUnprocessableEntity)
 			return nil, status.Error(codes.InvalidArgument, "invalid expression")
 		}
 		return nil, InternalError(fmt.Errorf("parse expression: %w", err))

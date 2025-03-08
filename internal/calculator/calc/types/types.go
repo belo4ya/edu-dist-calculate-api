@@ -1,6 +1,8 @@
 package types
 
-import "errors"
+import (
+	"errors"
+)
 
 var ErrInvalidExpr = errors.New("invalid expression")
 
@@ -8,6 +10,19 @@ type Token struct {
 	IsNumber bool
 	Number   float64
 	Symbol   string
+}
+
+func NewToken[T float64 | int | string](val T) Token {
+	switch v := any(val).(type) {
+	case float64:
+		return Token{IsNumber: true, Number: v}
+	case int:
+		return Token{IsNumber: true, Number: float64(v)}
+	case string:
+		return Token{IsNumber: false, Symbol: v}
+	default:
+		panic("should not happen")
+	}
 }
 
 type Task struct {
