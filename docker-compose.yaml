@@ -12,7 +12,7 @@ services:
       - MGMT_ADDR=:8081
       - GRPC_ADDR=:50051
       - HTTP_ADDR=:8080
-      - DB_BADGER_PATH=:/tmp/badger
+      - DB_BADGER_PATH=/tmp/badger
       - TIME_ADDITION_MS=1000
       - TIME_SUBTRACTION_MS=1000
       - TIME_MULTIPLICATIONS_MS=1000
@@ -21,29 +21,13 @@ services:
     volumes:
       - .volumes/badger:/tmp/badger
 
-  agent1:
+  agent:
     build:
       context: .
     command: ["/agent"]
     environment:
       - LOG_LEVEL=info
       - MGMT_ADDR=:8082
-      - CALCULATOR_API_ADDR=calculator:50051
-      - COMPUTING_POWER=4
-    restart: unless-stopped
-    deploy:
-      mode: replicated
-      replicas: 2
-    depends_on:
-      - calculator
-
-  agent2:
-    build:
-      context: .
-    command: ["/agent"]
-    environment:
-      - LOG_LEVEL=info
-      - MGMT_ADDR=:8083
       - CALCULATOR_API_ADDR=calculator:50051
       - COMPUTING_POWER=4
     restart: unless-stopped

@@ -19,8 +19,8 @@ build-agent:
 	CGO_ENABLED=0 go build -o ./bin/agent ./cmd/agent
 
 #***** Docker
-.PHONY: compose-up
-compose-up:
+.PHONY: up
+up:
 	docker-compose up
 
 #***** Lint

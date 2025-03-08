@@ -85,7 +85,7 @@ func (a *Agent) worker(ctx context.Context, workerID int) {
 				continue // context done
 			}
 
-			log.DebugContext(ctx, "task completed", "result", result)
+			log.InfoContext(ctx, "task completed", "result", result)
 		}
 	}
 }

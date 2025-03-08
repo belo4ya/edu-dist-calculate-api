@@ -66,7 +66,7 @@ UUID'ы и Series слишком скучно (см. [awesome identifiers](https
 Запустить все компоненты сервиса:
 
 ```shell
-make compose-up
+make up
 ```
 
 Запуск рутины:
