@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -27,7 +26,7 @@ func main() {
 }
 
 func run() error {
-	ctx := runy.SetupSignalHandler(context.Background())
+	ctx := runy.SetupSignalHandler()
 
 	conf, err := config.Load()
 	if err != nil {

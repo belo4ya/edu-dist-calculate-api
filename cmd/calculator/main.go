@@ -33,7 +33,7 @@ func main() {
 }
 
 func run() error {
-	ctx := runy.SetupSignalHandler(context.Background())
+	ctx := runy.SetupSignalHandler()
 
 	conf, err := config.Load()
 	if err != nil {
